@@ -1,0 +1,29 @@
+---
+import '../styles/global.css';
+if (Astro.locals.userId) return Astro.redirect('/dashboard');
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <title>Pocket Ops — CRM for the trades</title>
+  </head>
+  <body class="min-h-screen bg-ink-950 text-stone-100 flex items-center justify-center p-4">
+    <main class="w-full max-w-sm space-y-6 text-center">
+      <div>
+        <p class="text-5xl">⚡</p>
+        <h1 class="mt-2 text-3xl font-bold">Pocket Ops</h1>
+        <p class="mt-2 text-stone-400">
+          Jobs, invoices, and one-tap payments for UK trades — built for the van, not the office.
+        </p>
+      </div>
+      <div class="space-y-3">
+        <a href="/signup" class="flex min-h-14 w-full items-center justify-center rounded-2xl bg-orange-600 text-lg font-semibold text-white hover:bg-orange-500">Get started free</a>
+        <a href="/login" class="flex min-h-14 w-full items-center justify-center rounded-2xl border border-ink-600 text-lg font-semibold text-stone-200 hover:border-amber-500">Log in</a>
+      </div>
+    </main>
+  </body>
+</html>

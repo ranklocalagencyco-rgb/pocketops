@@ -1,0 +1,47 @@
+---
+import { env } from 'cloudflare:workers';
+import AppShell from '../../../layouts/AppShell.astro';
+import { canSeeFinancials } from '../../../lib/masking';
+
+if (!canSeeFinancials(Astro.locals.userRole!)) return Astro.redirect('/dashboard/settings');
+
+const hasKey = Boolean(env.STRIPE_SECRET_KEY);
+const hasWebhook = Boolean(env.STRIPE_WEBHOOK_SECRET);
+const webhookUrl = `${env.APP_URL || Astro.url.origin}/api/webhooks/stripe`;
+
+const steps = [
+  { done: hasKey, text: 'Add STRIPE_SECRET_KEY to your Cloudflare secrets (starts with sk_).' },
+  { done: hasWebhook, text: 'Create a Stripe webhook for checkout.session.completed and add its signing secret as STRIPE_WEBHOOK_SECRET.' },
+];
+---
+
+<AppShell title="Payments" active="settings">
+  <div class="mx-auto max-w-xl space-y-5">
+    <div>
+      <a href="/dashboard/settings" class="text-sm text-stone-400 hover:text-stone-200">← Settings</a>
+      <h2 class="mt-1 text-2xl font-bold">Payments</h2>
+      <p class="text-sm text-stone-400">One-tap Stripe Checkout on every invoice link — Apple Pay, Google Pay, and cards.</p>
+    </div>
+
+    <p class={`rounded-xl border px-4 py-3 text-sm font-medium ${hasKey && hasWebhook ? 'border-emerald-800 bg-emerald-950 text-emerald-300' : 'border-amber-800 bg-amber-950/40 text-amber-300'}`}>
+      {hasKey && hasWebhook ? '● Payments are live' : '○ Payments not live yet — finish the steps below.'}
+    </p>
+
+    <div class="space-y-2 rounded-2xl border border-ink-700 bg-ink-900 p-5">
+      <p class="font-semibold">Setup checklist</p>
+      {steps.map((s) => (
+        <p class={`flex items-start gap-2 text-sm ${s.done ? 'text-emerald-400' : 'text-stone-400'}`}>
+          <span class="mt-0.5">{s.done ? '✓' : '○'}</span>
+          {s.text}
+        </p>
+      ))}
+      <p class="pt-2 text-sm text-stone-400">Point the Stripe webhook at:</p>
+      <input readonly value={webhookUrl} onclick="this.select()" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 font-mono text-xs text-amber-300" />
+    </div>
+
+    <div class="rounded-2xl border border-ink-700 bg-ink-900 p-5 text-sm text-stone-400">
+      <p class="font-semibold text-stone-200">How customers pay</p>
+      <p class="mt-1">When a job moves to <span class="text-amber-300">Invoiced</span>, its job page shows a secure payment link. Text it to the customer — they tap once, pay with Apple Pay, Google Pay, or a card, and the job flips to <span class="text-emerald-300">Paid</span> automatically, firing the review text and accounting sync.</p>
+    </div>
+  </div>
+</AppShell>

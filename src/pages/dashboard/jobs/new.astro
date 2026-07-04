@@ -1,0 +1,90 @@
+---
+import { env } from 'cloudflare:workers';
+import { asc, eq } from 'drizzle-orm';
+import AppShell from '../../../layouts/AppShell.astro';
+import { createDb, tenantValues, tenantWhere } from '../../../db';
+import { customers, jobs } from '../../../db/schema';
+import { newClientToken, newId } from '../../../lib/ids';
+
+const tenantId = Astro.locals.tenantId!;
+const db = createDb(env.DB);
+
+let error = '';
+if (Astro.request.method === 'POST') {
+  try {
+    const form = await Astro.request.formData();
+    const customerId = String(form.get('customerId') ?? '');
+    const title = String(form.get('title') ?? '').trim();
+    const description = String(form.get('description') ?? '').trim() || null;
+    const scheduledRaw = String(form.get('scheduledAt') ?? '');
+    if (!customerId || !title) {
+      error = 'Customer and title are required.';
+    } else {
+      // Verify the customer belongs to this tenant before linking
+      const [owned] = await db
+        .select({ id: customers.id })
+        .from(customers)
+        .where(tenantWhere(customers, tenantId, eq(customers.id, customerId)))
+        .limit(1);
+      if (!owned) {
+        error = 'Invalid customer.';
+      } else {
+        const jobId = newId();
+        await db.insert(jobs).values(
+          tenantValues(tenantId, {
+            id: jobId,
+            customerId,
+            title,
+            description,
+            clientToken: newClientToken(),
+            scheduledAt: scheduledRaw ? new Date(scheduledRaw) : null,
+          }),
+        );
+        return Astro.redirect(`/dashboard/jobs/${jobId}`);
+      }
+    }
+  } catch {
+    error = 'Could not create the job. Please try again.';
+  }
+}
+
+const customerList = await db
+  .select({ id: customers.id, name: customers.name })
+  .from(customers)
+  .where(tenantWhere(customers, tenantId))
+  .orderBy(asc(customers.name));
+---
+
+<AppShell title="New job" active="jobs">
+  <div class="space-y-4">
+    <h1 class="text-xl font-bold">New job</h1>
+    {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
+    {customerList.length === 0 ? (
+      <p class="rounded-2xl border border-dashed border-ink-600 p-6 text-center text-stone-400">
+        Add a customer first. <a href="/dashboard/customers" class="text-amber-400 hover:underline">Go to customers →</a>
+      </p>
+    ) : (
+      <form method="POST" class="space-y-4">
+        <label class="block space-y-1">
+          <span class="text-sm text-stone-400">Customer</span>
+          <select name="customerId" required class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-900 px-4 text-base focus:border-amber-500 focus:outline-none">
+            {customerList.map((c) => <option value={c.id}>{c.name}</option>)}
+          </select>
+        </label>
+        <label class="block space-y-1">
+          <span class="text-sm text-stone-400">Job title</span>
+          <input name="title" required placeholder="e.g. Replace water heater" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-900 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+        </label>
+        <label class="block space-y-1">
+          <span class="text-sm text-stone-400">Details (optional)</span>
+          <textarea name="description" rows="3" class="w-full rounded-xl border border-ink-600 bg-ink-900 px-4 py-3 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none"></textarea>
+        </label>
+        <label class="block space-y-1">
+          <span class="text-sm text-stone-400">Scheduled for (optional)</span>
+          <input name="scheduledAt" type="datetime-local" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-900 px-4 text-base focus:border-amber-500 focus:outline-none" />
+        </label>
+        <button type="submit" class="w-full min-h-12 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">Create job</button>
+      </form>
+    )}
+  </div>
+</AppShell>

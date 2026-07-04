@@ -1,0 +1,33 @@
+# Copy to .dev.vars for local dev; set as Cloudflare Pages secrets for prod.
+# Everything is optional — features light up as credentials are added.
+
+# Canonical origin (OAuth callbacks, Twilio signature URL, magic links)
+APP_URL="http://localhost:4321"
+
+# Daily automations endpoint (/api/cron/daily) — set any long random string,
+# then hit the endpoint daily from a Cloudflare Worker cron or uptime service.
+CRON_SECRET=""
+
+# Module 6 — Stripe Checkout + webhook
+STRIPE_SECRET_KEY=""
+STRIPE_WEBHOOK_SECRET=""
+
+# Module 7/8 — Twilio missed-call text-back + review SMS
+TWILIO_ACCOUNT_SID=""
+TWILIO_AUTH_TOKEN=""
+
+# Unified email inbox — Google Cloud OAuth app (scope: gmail.modify)
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
+# Unified email inbox — Microsoft Entra app (scopes: Mail.Read Mail.Send)
+MS_CLIENT_ID=""
+MS_CLIENT_SECRET=""
+
+# Module 9 — QuickBooks Online
+QBO_CLIENT_ID=""
+QBO_CLIENT_SECRET=""
+QBO_ENVIRONMENT="sandbox"
+
+# Module 9 — Xero
+XERO_CLIENT_ID=""
+XERO_CLIENT_SECRET=""

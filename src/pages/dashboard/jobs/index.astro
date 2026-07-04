@@ -1,0 +1,93 @@
+---
+import { env } from 'cloudflare:workers';
+import { desc, eq, like, or } from 'drizzle-orm';
+import AppShell from '../../../layouts/AppShell.astro';
+import { createDb, tenantWhere } from '../../../db';
+import { customers, jobs, JOB_STATUSES, type JobStatus } from '../../../db/schema';
+import { fmtMoney, STATUS_LABELS } from '../../../lib/jobs';
+
+const tenantId = Astro.locals.tenantId!;
+const role = Astro.locals.userRole!;
+// Field roles see only their assigned work orders
+const isFieldRole = role === 'technician' || role === 'apprentice';
+const db = createDb(env.DB);
+
+const statusParam = Astro.url.searchParams.get('status');
+const filter = JOB_STATUSES.includes(statusParam as JobStatus) ? (statusParam as JobStatus) : null;
+const q = (Astro.url.searchParams.get('q') ?? '').trim().slice(0, 80);
+const search = q ? or(like(jobs.title, `%${q}%`), like(customers.name, `%${q}%`)) : undefined;
+
+const rows = await db
+  .select({
+    id: jobs.id,
+    title: jobs.title,
+    status: jobs.status,
+    totalCents: jobs.totalCents,
+    scheduledAt: jobs.scheduledAt,
+    customerName: customers.name,
+  })
+  .from(jobs)
+  .innerJoin(customers, eq(jobs.customerId, customers.id))
+  .where(
+    tenantWhere(
+      jobs,
+      tenantId,
+      filter ? eq(jobs.status, filter) : undefined,
+      isFieldRole ? eq(jobs.assignedUserId, Astro.locals.userId!) : undefined,
+      search,
+    ),
+  )
+  .orderBy(desc(jobs.updatedAt));
+
+const statusColors: Record<JobStatus, string> = {
+  lead: 'bg-sky-950 text-sky-300 border-sky-800',
+  quoted: 'bg-violet-950 text-violet-300 border-violet-800',
+  approved: 'bg-cyan-950 text-cyan-300 border-cyan-800',
+  scheduled: 'bg-blue-950 text-blue-300 border-blue-800',
+  in_progress: 'bg-amber-950 text-amber-300 border-amber-800',
+  completed: 'bg-lime-950 text-lime-300 border-lime-800',
+  invoiced: 'bg-orange-950 text-orange-300 border-orange-800',
+  paid: 'bg-emerald-950 text-emerald-300 border-emerald-800',
+  cancelled: 'bg-ink-800 text-stone-400 border-ink-600',
+};
+---
+
+<AppShell title="Jobs" active="jobs">
+  <div class="space-y-4">
+    <div class="flex items-center justify-between">
+      <h1 class="text-xl font-bold">
+        Jobs{filter ? ` · ${STATUS_LABELS[filter]}` : ''}{q ? ` · “${q}”` : ''}
+      </h1>
+      <a href="/dashboard/jobs/new" class="flex min-h-12 items-center rounded-xl bg-orange-600 px-4 font-semibold text-white hover:bg-orange-500">+ New</a>
+    </div>
+
+    <div class="flex gap-2 overflow-x-auto pb-1">
+      <a href="/dashboard/jobs" class={`flex min-h-12 items-center whitespace-nowrap rounded-xl border px-4 text-sm ${!filter ? 'border-amber-500 text-amber-400' : 'border-ink-600 text-stone-400'}`}>All</a>
+      {JOB_STATUSES.map((s) => (
+        <a href={`/dashboard/jobs?status=${s}`} class={`flex min-h-12 items-center whitespace-nowrap rounded-xl border px-4 text-sm ${filter === s ? 'border-amber-500 text-amber-400' : 'border-ink-600 text-stone-400'}`}>
+          {STATUS_LABELS[s]}
+        </a>
+      ))}
+    </div>
+
+    {rows.length === 0 && (
+      <p class="rounded-2xl border border-dashed border-ink-600 p-8 text-center text-stone-500">Nothing here yet.</p>
+    )}
+    <div class="space-y-2">
+      {rows.map((j) => (
+        <a href={`/dashboard/jobs/${j.id}`} class="flex min-h-16 items-center justify-between gap-3 rounded-2xl border border-ink-700 bg-ink-900 px-4 py-3 hover:border-amber-500/50">
+          <div class="min-w-0">
+            <p class="truncate font-medium">{j.title}</p>
+            <p class="truncate text-sm text-stone-400">
+              {j.customerName}{j.scheduledAt ? ` · ${j.scheduledAt.toLocaleDateString('en-GB')}` : ''}
+            </p>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="font-semibold">{fmtMoney(j.totalCents)}</span>
+            <span class={`rounded-full border px-2.5 py-1 text-xs ${statusColors[j.status]}`}>{STATUS_LABELS[j.status]}</span>
+          </div>
+        </a>
+      ))}
+    </div>
+  </div>
+</AppShell>

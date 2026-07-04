@@ -1,0 +1,103 @@
+---
+import { env } from 'cloudflare:workers';
+import { eq } from 'drizzle-orm';
+import AppShell from '../../../layouts/AppShell.astro';
+import { createDb } from '../../../db';
+import { tenants } from '../../../db/schema';
+import { canSeeFinancials } from '../../../lib/masking';
+
+if (!canSeeFinancials(Astro.locals.userRole!)) return Astro.redirect('/dashboard/settings');
+const tenantId = Astro.locals.tenantId!;
+const db = createDb(env.DB);
+
+const TIMEZONES = [
+  'Europe/London', 'Europe/Dublin',
+  'Europe/Paris', 'Europe/Berlin', 'Europe/Madrid',
+  'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+  'America/Toronto', 'America/Vancouver',
+  'Australia/Sydney', 'Australia/Melbourne', 'Australia/Brisbane', 'Australia/Perth',
+  'Pacific/Auckland',
+];
+const CURRENCIES = ['gbp', 'eur', 'usd', 'cad', 'aud', 'nzd'];
+
+let notice = '';
+let error = '';
+if (Astro.request.method === 'POST') {
+  try {
+    const form = await Astro.request.formData();
+    const timezone = String(form.get('timezone') ?? '');
+    const currency = String(form.get('currency') ?? '');
+    const vatNumber = String(form.get('vatNumber') ?? '').trim().toUpperCase() || null;
+    const vatPercent = Number(String(form.get('vatPercent') ?? '0').replace('%', ''));
+    if (!TIMEZONES.includes(timezone) || !CURRENCIES.includes(currency)) {
+      error = 'Pick a timezone and currency from the lists.';
+    } else if (!Number.isFinite(vatPercent) || vatPercent < 0 || vatPercent > 30) {
+      error = 'VAT rate must be between 0 and 30%.';
+    } else if (
+      !Number.isFinite(Number(form.get('depositPercent') ?? 0)) ||
+      Number(form.get('depositPercent')) < 0 ||
+      Number(form.get('depositPercent')) > 100
+    ) {
+      error = 'Deposit must be between 0 and 100%.';
+    } else {
+      await db
+        .update(tenants)
+        .set({
+          timezone,
+          currency,
+          vatNumber,
+          taxRateBps: Math.round(vatPercent * 100),
+          depositRateBps: Math.round(Number(form.get('depositPercent')) * 100),
+        })
+        .where(eq(tenants.id, tenantId));
+      notice = 'Regional settings saved. VAT applies when a job’s line items next change.';
+    }
+  } catch {
+    error = 'Could not save. Please try again.';
+  }
+}
+
+const [tenant] = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+---
+
+<AppShell title="Regional & VAT" active="settings">
+  <div class="mx-auto max-w-xl space-y-5">
+    <div>
+      <a href="/dashboard/settings" class="text-sm text-stone-400 hover:text-stone-200">← Settings</a>
+      <h2 class="mt-1 text-2xl font-bold">Regional & VAT</h2>
+      <p class="text-sm text-stone-400">Drives every date, time, price, and job total in the app.</p>
+    </div>
+    {notice && <p class="rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300">{notice}</p>}
+    {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
+    <form method="POST" class="space-y-4 rounded-2xl border border-ink-700 bg-ink-900 p-5">
+      <label class="block space-y-1">
+        <span class="text-sm text-stone-400">Timezone</span>
+        <select name="timezone" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none">
+          {TIMEZONES.map((z) => <option value={z} selected={z === tenant?.timezone}>{z.replace('_', ' ')}</option>)}
+        </select>
+      </label>
+      <label class="block space-y-1">
+        <span class="text-sm text-stone-400">Currency</span>
+        <select name="currency" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none">
+          {CURRENCIES.map((c) => <option value={c} selected={c === tenant?.currency}>{c.toUpperCase()}</option>)}
+        </select>
+      </label>
+      <label class="block space-y-1">
+        <span class="text-sm text-stone-400">VAT rate (%)</span>
+        <input name="vatPercent" inputmode="decimal" value={((tenant?.taxRateBps ?? 0) / 100).toString()} class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none" />
+        <span class="block text-xs text-stone-500">UK standard rate is 20%. Set 0 if you're not VAT registered — no VAT line will show on invoices.</span>
+      </label>
+      <label class="block space-y-1">
+        <span class="text-sm text-stone-400">Deposit on quote acceptance (%)</span>
+        <input name="depositPercent" inputmode="decimal" value={((tenant?.depositRateBps ?? 0) / 100).toString()} class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none" />
+        <span class="block text-xs text-stone-500">Customers pay this when they accept a quote online (needs Stripe). Set 0 for no deposit.</span>
+      </label>
+      <label class="block space-y-1">
+        <span class="text-sm text-stone-400">VAT registration number</span>
+        <input name="vatNumber" value={tenant?.vatNumber ?? ''} placeholder="GB123456789" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+        <span class="block text-xs text-stone-500">Shown on customer invoices — required if you charge VAT.</span>
+      </label>
+      <button type="submit" class="w-full min-h-12 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">Save changes</button>
+    </form>
+  </div>
+</AppShell>

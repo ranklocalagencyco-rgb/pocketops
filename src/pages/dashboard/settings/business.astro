@@ -1,0 +1,71 @@
+---
+import { env } from 'cloudflare:workers';
+import { eq } from 'drizzle-orm';
+import AppShell from '../../../layouts/AppShell.astro';
+import { createDb } from '../../../db';
+import { tenants } from '../../../db/schema';
+import { canSeeFinancials } from '../../../lib/masking';
+
+if (!canSeeFinancials(Astro.locals.userRole!)) return Astro.redirect('/dashboard/settings');
+const tenantId = Astro.locals.tenantId!;
+const db = createDb(env.DB);
+
+let notice = '';
+let error = '';
+if (Astro.request.method === 'POST') {
+  try {
+    const form = await Astro.request.formData();
+    const name = String(form.get('name') ?? '').trim();
+    if (!name) {
+      error = 'Business name is required.';
+    } else {
+      await db
+        .update(tenants)
+        .set({
+          name,
+          phone: String(form.get('phone') ?? '').trim() || null,
+          email: String(form.get('email') ?? '').trim() || null,
+        })
+        .where(eq(tenants.id, tenantId));
+      notice = 'Business details saved.';
+    }
+  } catch {
+    error = 'Could not save. Please try again.';
+  }
+}
+
+const [tenant] = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+---
+
+<AppShell title="Business" active="settings">
+  <div class="mx-auto max-w-xl space-y-5">
+    <div>
+      <a href="/dashboard/settings" class="text-sm text-stone-400 hover:text-stone-200">← Settings</a>
+      <h2 class="mt-1 text-2xl font-bold">Business</h2>
+      <p class="text-sm text-stone-400">Shown on customer invoices and payment pages.</p>
+    </div>
+    {notice && <p class="rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300">{notice}</p>}
+    {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
+    <form method="POST" class="space-y-4 rounded-2xl border border-ink-700 bg-ink-900 p-5">
+      <label class="block space-y-1">
+        <span class="text-sm text-stone-400">Business name</span>
+        <input name="name" value={tenant?.name} required class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none" />
+      </label>
+      <label class="block space-y-1">
+        <span class="text-sm text-stone-400">Office phone</span>
+        <input name="phone" type="tel" value={tenant?.phone ?? ''} class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none" />
+      </label>
+      <label class="block space-y-1">
+        <span class="text-sm text-stone-400">Business email</span>
+        <input name="email" type="email" value={tenant?.email ?? ''} class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none" />
+      </label>
+      <button type="submit" class="w-full min-h-12 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">Save changes</button>
+    </form>
+
+    <div class="rounded-2xl border border-ink-700 bg-ink-900 p-5">
+      <p class="font-semibold">Your booking page</p>
+      <p class="mt-1 text-sm text-stone-400">Share this link on your website, Google Business Profile, or social media — requests land in your pipeline as leads.</p>
+      <input readonly value={`${Astro.url.origin}/book/${tenant?.slug}`} onclick="this.select()" class="mt-2 w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 font-mono text-xs text-amber-300" />
+    </div>
+  </div>
+</AppShell>

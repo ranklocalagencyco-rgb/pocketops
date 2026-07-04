@@ -1,0 +1,99 @@
+---
+import '../styles/global.css';
+import { env } from 'cloudflare:workers';
+import { eq } from 'drizzle-orm';
+import { createDb } from '../db';
+import { tenants, users } from '../db/schema';
+import { newId } from '../lib/ids';
+import { hashPassword } from '../lib/password';
+import { clientIp } from '../lib/request';
+import { createSession, SESSION_COOKIE, sessionCookieOptions } from '../lib/session';
+
+if (Astro.locals.userId) return Astro.redirect('/dashboard');
+
+let error = '';
+if (Astro.request.method === 'POST') {
+  try {
+    const form = await Astro.request.formData();
+    const businessName = String(form.get('businessName') ?? '').trim();
+    const name = String(form.get('name') ?? '').trim();
+    const email = String(form.get('email') ?? '').trim().toLowerCase();
+    const password = String(form.get('password') ?? '');
+
+    if (!businessName || !name || !email.includes('@') || password.length < 8) {
+      error = 'All fields required; password must be at least 8 characters.';
+    } else {
+      const db = createDb(env.DB);
+      const existing = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
+      if (existing.length > 0) {
+        error = 'That email is already registered.';
+      } else {
+        const tenantId = newId();
+        const slug =
+          businessName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 30) +
+          '-' + newId().slice(0, 6).toLowerCase();
+        // UK-market defaults; adjustable in Settings → Regional & VAT
+        await db.insert(tenants).values({
+          id: tenantId,
+          name: businessName,
+          slug,
+          currency: 'gbp',
+          timezone: 'Europe/London',
+          taxRateBps: 2000,
+        });
+        const userId = newId();
+        await db.insert(users).values({
+          id: userId,
+          tenantId,
+          email,
+          passwordHash: await hashPassword(password),
+          name,
+          role: 'owner',
+        });
+        const { token, expiresAt } = await createSession(db, {
+          tenantId,
+          userId,
+          ip: clientIp(Astro.request),
+          userAgent: Astro.request.headers.get('user-agent'),
+        });
+        Astro.cookies.set(SESSION_COOKIE, token, sessionCookieOptions(expiresAt));
+        return Astro.redirect('/dashboard');
+      }
+    }
+  } catch (err) {
+    console.error('[signup]', err);
+    error = 'Signup failed. Please try again.';
+  }
+}
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <title>Create your account · Pocket Ops</title>
+  </head>
+  <body class="min-h-screen bg-ink-950 text-stone-100 flex items-center justify-center p-4">
+    <main class="w-full max-w-sm space-y-6">
+      <div class="text-center">
+        <h1 class="text-2xl font-bold"><span class="text-amber-400">⚡</span> Pocket Ops</h1>
+        <p class="mt-1 text-stone-400">Set up your company workspace</p>
+      </div>
+      {error && <p class="rounded-lg bg-red-950 border border-red-800 px-4 py-3 text-sm text-red-300">{error}</p>}
+      <form method="POST" class="space-y-4">
+        <input name="businessName" required placeholder="Business name" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-900 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+        <input name="name" required placeholder="Your name" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-900 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+        <input name="email" type="email" required placeholder="Email" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-900 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+        <input name="password" type="password" required minlength="8" placeholder="Password (8+ characters)" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-900 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+        <button type="submit" class="w-full min-h-12 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">
+          Create workspace
+        </button>
+      </form>
+      <p class="text-center text-sm text-stone-400">
+        Already set up? <a href="/login" class="text-amber-400 hover:underline">Log in</a>
+      </p>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pocketops",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "pages_build_output_dir": "./dist",
+  // Workers AI: add the "AI" binding in the Cloudflare dashboard (or uncomment
+  // below) for production. Kept out of local config — platformProxy cannot
+  // initialise it without a Cloudflare login and it kills `astro dev`.
+  // "ai": { "binding": "AI" },
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      // Run `npx wrangler r2 bucket create pocketops-files` before remote deploy.
+      "bucket_name": "pocketops-files"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "pocketops-db-eu",
+      "database_id": "b498084c-102f-4d78-996e-f217eccde55f",
+      "migrations_dir": "drizzle"
+    }
+  ]
+}

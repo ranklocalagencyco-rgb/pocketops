@@ -1,0 +1,84 @@
+---
+import { env } from 'cloudflare:workers';
+import { desc, eq } from 'drizzle-orm';
+import AppShell from '../../../layouts/AppShell.astro';
+import { createDb, tenantWhere } from '../../../db';
+import { customers, reviewRequests, tenants } from '../../../db/schema';
+import { fmtDateTz } from '../../../lib/jobs';
+import { canSeeFinancials } from '../../../lib/masking';
+
+if (!canSeeFinancials(Astro.locals.userRole!)) return Astro.redirect('/dashboard/settings');
+const tenantId = Astro.locals.tenantId!;
+const db = createDb(env.DB);
+
+let notice = '';
+let error = '';
+if (Astro.request.method === 'POST') {
+  try {
+    const form = await Astro.request.formData();
+    await db
+      .update(tenants)
+      .set({
+        reviewLinkUrl: String(form.get('reviewLinkUrl') ?? '').trim() || null,
+        reviewMessage: String(form.get('reviewMessage') ?? '').trim() || null,
+      })
+      .where(eq(tenants.id, tenantId));
+    notice = 'Review settings saved.';
+  } catch {
+    error = 'Could not save. Please try again.';
+  }
+}
+
+const [tenant] = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+const recent = await db
+  .select({
+    id: reviewRequests.id,
+    sentAt: reviewRequests.sentAt,
+    createdAt: reviewRequests.createdAt,
+    customerName: customers.name,
+  })
+  .from(reviewRequests)
+  .innerJoin(customers, eq(reviewRequests.customerId, customers.id))
+  .where(tenantWhere(reviewRequests, tenantId))
+  .orderBy(desc(reviewRequests.createdAt))
+  .limit(5);
+---
+
+<AppShell title="Reviews" active="settings">
+  <div class="mx-auto max-w-xl space-y-5">
+    <div>
+      <a href="/dashboard/settings" class="text-sm text-stone-400 hover:text-stone-200">← Settings</a>
+      <h2 class="mt-1 text-2xl font-bold">Reviews</h2>
+      <p class="text-sm text-stone-400">The moment a customer pays, they get a text asking for a review.</p>
+    </div>
+    {notice && <p class="rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300">{notice}</p>}
+    {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
+
+    <form method="POST" class="space-y-4 rounded-2xl border border-ink-700 bg-ink-900 p-5">
+      <label class="block space-y-1">
+        <span class="text-sm text-stone-400">Review link</span>
+        <input name="reviewLinkUrl" type="url" value={tenant?.reviewLinkUrl ?? ''} placeholder="https://g.page/r/..." class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+        <span class="block text-xs text-stone-500">Your Google Business review link works best. Leave blank to turn review texts off.</span>
+      </label>
+      <label class="block space-y-1">
+        <span class="text-sm text-stone-400">Review message</span>
+        <textarea name="reviewMessage" rows="3" placeholder={`Thanks for choosing ${tenant?.name}! If we did a great job, a quick review means the world to us: {link}`} class="w-full rounded-xl border border-ink-600 bg-ink-950 px-4 py-3 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none">{tenant?.reviewMessage ?? ''}</textarea>
+        <span class="block text-xs text-stone-500">Use {'{name}'} for the customer's first name and {'{link}'} for the review link. Leave blank for the default.</span>
+      </label>
+      <button type="submit" class="w-full min-h-12 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">Save changes</button>
+    </form>
+
+    {recent.length > 0 && (
+      <div class="rounded-2xl border border-ink-700 bg-ink-900 p-5">
+        <p class="font-semibold">Recent requests</p>
+        <div class="mt-2 space-y-1 text-sm text-stone-400">
+          {recent.map((r) => (
+            <p>
+              {r.sentAt ? '✓' : '…'} {r.customerName} — {fmtDateTz(r.sentAt ?? r.createdAt, tenant?.timezone)}
+            </p>
+          ))}
+        </div>
+      </div>
+    )}
+  </div>
+</AppShell>

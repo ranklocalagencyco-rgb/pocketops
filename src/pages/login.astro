@@ -1,0 +1,67 @@
+---
+import '../styles/global.css';
+import { env } from 'cloudflare:workers';
+import { eq } from 'drizzle-orm';
+import { createDb } from '../db';
+import { users } from '../db/schema';
+import { verifyPassword } from '../lib/password';
+import { clientIp } from '../lib/request';
+import { createSession, SESSION_COOKIE, sessionCookieOptions } from '../lib/session';
+
+if (Astro.locals.userId) return Astro.redirect('/dashboard');
+
+let error = '';
+if (Astro.request.method === 'POST') {
+  try {
+    const form = await Astro.request.formData();
+    const email = String(form.get('email') ?? '').trim().toLowerCase();
+    const password = String(form.get('password') ?? '');
+    const db = createDb(env.DB);
+    const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    // Same error for unknown email vs bad password — no account enumeration
+    if (user && user.isActive && (await verifyPassword(password, user.passwordHash))) {
+      const { token, expiresAt } = await createSession(db, {
+        tenantId: user.tenantId,
+        userId: user.id,
+        ip: clientIp(Astro.request),
+        userAgent: Astro.request.headers.get('user-agent'),
+      });
+      Astro.cookies.set(SESSION_COOKIE, token, sessionCookieOptions(expiresAt));
+      return Astro.redirect('/dashboard');
+    }
+    error = 'Invalid email or password.';
+  } catch (err) {
+    console.error('[login]', err);
+    error = 'Login failed. Please try again.';
+  }
+}
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <title>Log in · Pocket Ops</title>
+  </head>
+  <body class="min-h-screen bg-ink-950 text-stone-100 flex items-center justify-center p-4">
+    <main class="w-full max-w-sm space-y-6">
+      <div class="text-center">
+        <h1 class="text-2xl font-bold"><span class="text-amber-400">⚡</span> Pocket Ops</h1>
+        <p class="mt-1 text-stone-400">Log in to your workspace</p>
+      </div>
+      {error && <p class="rounded-lg bg-red-950 border border-red-800 px-4 py-3 text-sm text-red-300">{error}</p>}
+      <form method="POST" class="space-y-4">
+        <input name="email" type="email" required placeholder="Email" autocomplete="email" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-900 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+        <input name="password" type="password" required placeholder="Password" autocomplete="current-password" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-900 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+        <button type="submit" class="w-full min-h-12 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">
+          Log in
+        </button>
+      </form>
+      <p class="text-center text-sm text-stone-400">
+        New here? <a href="/signup" class="text-amber-400 hover:underline">Create a workspace</a>
+      </p>
+    </main>
+  </body>
+</html>

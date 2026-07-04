@@ -1,0 +1,812 @@
+---
+import { env } from 'cloudflare:workers';
+import { asc, desc, eq, isNull } from 'drizzle-orm';
+import AppShell from '../../../layouts/AppShell.astro';
+import { createDb, tenantValues, tenantWhere } from '../../../db';
+import {
+  certificates,
+  CERT_TYPES,
+  customers,
+  expenses,
+  jobLineItems,
+  jobPhotos,
+  jobs,
+  payments,
+  priceBookItems,
+  signatures,
+  tenants,
+  timeEntries,
+  users,
+  type JobStatus,
+} from '../../../db/schema';
+import { CERT_LABELS } from '../../../lib/certs';
+import { newId } from '../../../lib/ids';
+import { canTransition, cisDeductionCents, fmtDateTz, fmtMoney, parseMoney, recomputeTotals, STATUS_LABELS, TRANSITIONS } from '../../../lib/jobs';
+import { canSeeFinancials } from '../../../lib/masking';
+import { sendAndLogSms } from '../../../lib/messages';
+import { handleJobPaid } from '../../../lib/post-payment';
+import { clientIp } from '../../../lib/request';
+import { twilioConfigured } from '../../../lib/twilio';
+
+const tenantId = Astro.locals.tenantId!;
+const role = Astro.locals.userRole!;
+const showCosts = canSeeFinancials(role);
+// Field roles see only their assigned work (Module 3 masking framework)
+const isFieldRole = role === 'technician' || role === 'apprentice';
+const jobId = Astro.params.id!;
+const db = createDb(env.DB);
+
+async function loadJob() {
+  const [row] = await db
+    .select()
+    .from(jobs)
+    .where(tenantWhere(jobs, tenantId, eq(jobs.id, jobId)))
+    .limit(1);
+  return row ?? null;
+}
+
+let job = await loadJob();
+if (!job) return new Response('Not found', { status: 404 });
+// Structural gate, not cosmetic: an unassigned job does not exist for a tech
+if (isFieldRole && job.assignedUserId !== Astro.locals.userId) {
+  return new Response('Not found', { status: 404 });
+}
+
+let error = '';
+if (Astro.request.method === 'POST') {
+  try {
+    const form = await Astro.request.formData();
+    const intent = String(form.get('intent') ?? '');
+
+    if (intent === 'status') {
+      const to = String(form.get('to') ?? '') as JobStatus;
+      if (!canTransition(job.status, to)) {
+        error = `Cannot move from ${STATUS_LABELS[job.status]} to ${STATUS_LABELS[to] ?? to}.`;
+      } else {
+        const now = new Date();
+        const patch: Record<string, unknown> = { status: to, updatedAt: now };
+        if (to === 'invoiced') patch.invoicedAt = now;
+        if (to === 'completed') patch.completedAt = now;
+        if (to === 'paid') patch.paidAt = now; // manual (cash/check) payment
+        await db.update(jobs).set(patch).where(tenantWhere(jobs, tenantId, eq(jobs.id, jobId)));
+        if (to === 'paid') {
+          // Manual payments get the same automation as Stripe payments:
+          // payment log + review SMS + ledger sync
+          const [t] = await db
+            .select({ currency: tenants.currency })
+            .from(tenants)
+            .where(eq(tenants.id, tenantId))
+            .limit(1);
+          await db.insert(payments).values(
+            tenantValues(tenantId, {
+              id: newId(),
+              jobId,
+              amountCents: job.totalCents,
+              currency: t?.currency ?? 'gbp',
+              method: 'cash',
+              status: 'succeeded',
+              paidAt: now,
+            }),
+          );
+          await handleJobPaid(db, tenantId, jobId, job.customerId);
+        }
+      }
+    } else if (intent === 'add-item') {
+      const description = String(form.get('description') ?? '').trim();
+      const quantity = Number(form.get('quantity') ?? 1);
+      const unitPriceCents = parseMoney(form.get('unitPrice'));
+      const unitCostCents = showCosts ? parseMoney(form.get('unitCost')) : null;
+      const kind = String(form.get('kind') ?? 'labor');
+      if (!description || unitPriceCents === null || !Number.isFinite(quantity) || quantity <= 0) {
+        error = 'Line items need a description, quantity, and price.';
+      } else {
+        await db.insert(jobLineItems).values(
+          tenantValues(tenantId, {
+            id: newId(),
+            jobId,
+            kind: (['labor', 'material', 'fee'].includes(kind) ? kind : 'labor') as 'labor' | 'material' | 'fee',
+            description,
+            quantity,
+            unitPriceCents,
+            unitCostCents,
+          }),
+        );
+        await recomputeTotals(db, tenantId, jobId);
+      }
+    } else if (intent === 'add-from-book') {
+      // One-tap add from the Settings → Price Book catalog
+      const bookItemId = String(form.get('bookItemId') ?? '');
+      const [bookItem] = await db
+        .select()
+        .from(priceBookItems)
+        .where(tenantWhere(priceBookItems, tenantId, eq(priceBookItems.id, bookItemId), eq(priceBookItems.isActive, true)))
+        .limit(1);
+      if (!bookItem) {
+        error = 'That price book item no longer exists.';
+      } else {
+        await db.insert(jobLineItems).values(
+          tenantValues(tenantId, {
+            id: newId(),
+            jobId,
+            kind: bookItem.kind,
+            description: bookItem.description,
+            quantity: 1,
+            unitPriceCents: bookItem.unitPriceCents,
+            unitCostCents: bookItem.unitCostCents,
+          }),
+        );
+        await recomputeTotals(db, tenantId, jobId);
+      }
+    } else if (intent === 'delete-item') {
+      const itemId = String(form.get('itemId') ?? '');
+      await db
+        .delete(jobLineItems)
+        .where(tenantWhere(jobLineItems, tenantId, eq(jobLineItems.id, itemId), eq(jobLineItems.jobId, jobId)));
+      await recomputeTotals(db, tenantId, jobId);
+    } else if (intent === 'assign') {
+      if (isFieldRole) throw new Error('forbidden'); // owners/admins dispatch, techs don't
+      const assignedUserId = String(form.get('assignedUserId') ?? '') || null;
+      if (assignedUserId) {
+        const [tech] = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(tenantWhere(users, tenantId, eq(users.id, assignedUserId)))
+          .limit(1);
+        if (!tech) throw new Error('bad assignee');
+      }
+      await db
+        .update(jobs)
+        .set({ assignedUserId, updatedAt: new Date() })
+        .where(tenantWhere(jobs, tenantId, eq(jobs.id, jobId)));
+    } else if (intent === 'reschedule') {
+      const raw = String(form.get('scheduledAt') ?? '');
+      await db
+        .update(jobs)
+        .set({ scheduledAt: raw ? new Date(raw) : null, updatedAt: new Date() })
+        .where(tenantWhere(jobs, tenantId, eq(jobs.id, jobId)));
+    } else if (intent === 'recurrence') {
+      if (isFieldRole) throw new Error('forbidden');
+      const months = Number(form.get('months') ?? 0);
+      await db
+        .update(jobs)
+        .set({ recurrenceMonths: [3, 6, 12].includes(months) ? months : null, updatedAt: new Date() })
+        .where(tenantWhere(jobs, tenantId, eq(jobs.id, jobId)));
+    } else if (intent === 'sms-reminder' || intent === 'sms-omw') {
+      const [t] = await db
+        .select({ twilioNumber: tenants.twilioNumber, timezone: tenants.timezone, name: tenants.name })
+        .from(tenants)
+        .where(eq(tenants.id, tenantId))
+        .limit(1);
+      const [cust] = await db
+        .select({ id: customers.id, phone: customers.phone, name: customers.name })
+        .from(customers)
+        .where(tenantWhere(customers, tenantId, eq(customers.id, job.customerId)))
+        .limit(1);
+      if (!twilioConfigured(env) || !t?.twilioNumber || !cust?.phone) {
+        error = 'Texting needs Twilio connected (Settings → Messaging) and a customer mobile number.';
+      } else {
+        const first = cust.name.split(/\s+/)[0];
+        const body =
+          intent === 'sms-omw'
+            ? `Hi ${first}, ${t.name} here — we're on our way to you now. See you shortly!`
+            : `Hi ${first}, a reminder from ${t.name}: your appointment for "${job.title}" is booked for ${job.scheduledAt ? fmtDateTz(job.scheduledAt, t.timezone) : 'soon'}. Reply here if you need to change it.`;
+        const result = await sendAndLogSms(db, env, tenantId, {
+          to: cust.phone,
+          from: t.twilioNumber,
+          body,
+          customerId: cust.id,
+        });
+        if (!result.ok) error = 'Text failed to send — check your Twilio setup.';
+      }
+    } else if (intent === 'add-expense') {
+      const description = String(form.get('description') ?? '').trim();
+      const amountCents = parseMoney(form.get('amount'));
+      if (!description || amountCents === null) {
+        error = 'Expenses need a description and an amount.';
+      } else {
+        await db.insert(expenses).values(
+          tenantValues(tenantId, {
+            id: newId(),
+            jobId,
+            userId: Astro.locals.userId,
+            description,
+            amountCents,
+          }),
+        );
+      }
+    } else if (intent === 'delete-expense') {
+      await db
+        .delete(expenses)
+        .where(tenantWhere(expenses, tenantId, eq(expenses.id, String(form.get('expenseId') ?? '')), eq(expenses.jobId, jobId)));
+    } else if (intent === 'clock') {
+      const [open] = await db
+        .select()
+        .from(timeEntries)
+        .where(
+          tenantWhere(
+            timeEntries,
+            tenantId,
+            eq(timeEntries.jobId, jobId),
+            eq(timeEntries.userId, Astro.locals.userId!),
+            isNull(timeEntries.endedAt),
+          ),
+        )
+        .limit(1);
+      if (open) {
+        await db
+          .update(timeEntries)
+          .set({ endedAt: new Date() })
+          .where(tenantWhere(timeEntries, tenantId, eq(timeEntries.id, open.id)));
+      } else {
+        const lat = Number(form.get('lat'));
+        const lng = Number(form.get('lng'));
+        await db.insert(timeEntries).values(
+          tenantValues(tenantId, {
+            id: newId(),
+            jobId,
+            userId: Astro.locals.userId!,
+            startedAt: new Date(),
+            lat: Number.isFinite(lat) && lat !== 0 ? lat : null,
+            lng: Number.isFinite(lng) && lng !== 0 ? lng : null,
+          }),
+        );
+      }
+    } else if (intent === 'cis') {
+      if (isFieldRole) throw new Error('forbidden');
+      await db
+        .update(jobs)
+        .set({ cisReverseCharge: String(form.get('enabled')) === '1', updatedAt: new Date() })
+        .where(tenantWhere(jobs, tenantId, eq(jobs.id, jobId)));
+      await recomputeTotals(db, tenantId, jobId);
+    } else if (intent === 'sign') {
+      const signerName = String(form.get('signerName') ?? '').trim();
+      const imageDataUrl = String(form.get('imageDataUrl') ?? '');
+      if (!signerName || !imageDataUrl.startsWith('data:image/png;base64,') || imageDataUrl.length > 500_000) {
+        error = 'Signature needs a name and a drawn signature.';
+      } else {
+        await db.insert(signatures).values(
+          tenantValues(tenantId, {
+            id: newId(),
+            jobId,
+            signerName,
+            imageDataUrl,
+            ip: clientIp(Astro.request),
+          }),
+        );
+      }
+    }
+    job = await loadJob();
+    if (!job) return new Response('Not found', { status: 404 });
+  } catch {
+    error = error || 'That action failed. Please try again.';
+  }
+}
+
+const [customer] = await db
+  .select()
+  .from(customers)
+  .where(tenantWhere(customers, tenantId, eq(customers.id, job.customerId)))
+  .limit(1);
+const items = await db
+  .select()
+  .from(jobLineItems)
+  .where(tenantWhere(jobLineItems, tenantId, eq(jobLineItems.jobId, jobId)))
+  .orderBy(asc(jobLineItems.sortOrder), asc(jobLineItems.id));
+const sigs = await db
+  .select()
+  .from(signatures)
+  .where(tenantWhere(signatures, tenantId, eq(signatures.jobId, jobId)));
+const team = await db
+  .select({ id: users.id, name: users.name, role: users.role })
+  .from(users)
+  .where(tenantWhere(users, tenantId, eq(users.isActive, true)))
+  .orderBy(asc(users.name));
+const [tenant] = await db
+  .select({ timezone: tenants.timezone, currency: tenants.currency, twilioNumber: tenants.twilioNumber })
+  .from(tenants)
+  .where(eq(tenants.id, tenantId))
+  .limit(1);
+const photos = await db
+  .select({ id: jobPhotos.id })
+  .from(jobPhotos)
+  .where(tenantWhere(jobPhotos, tenantId, eq(jobPhotos.jobId, jobId)))
+  .orderBy(desc(jobPhotos.createdAt));
+const expenseRows = await db
+  .select()
+  .from(expenses)
+  .where(tenantWhere(expenses, tenantId, eq(expenses.jobId, jobId)))
+  .orderBy(desc(expenses.createdAt));
+const timeRows = await db
+  .select({
+    id: timeEntries.id,
+    startedAt: timeEntries.startedAt,
+    endedAt: timeEntries.endedAt,
+    userName: users.name,
+    hourlyCostCents: users.hourlyCostCents,
+    userId: timeEntries.userId,
+  })
+  .from(timeEntries)
+  .innerJoin(users, eq(timeEntries.userId, users.id))
+  .where(tenantWhere(timeEntries, tenantId, eq(timeEntries.jobId, jobId)))
+  .orderBy(desc(timeEntries.startedAt));
+const money = (cents: number) => fmtMoney(cents, tenant?.currency);
+const bookItems = await db
+  .select({ id: priceBookItems.id, description: priceBookItems.description, unitPriceCents: priceBookItems.unitPriceCents })
+  .from(priceBookItems)
+  .where(tenantWhere(priceBookItems, tenantId, eq(priceBookItems.isActive, true)))
+  .orderBy(asc(priceBookItems.description));
+const paymentRows = await db
+  .select()
+  .from(payments)
+  .where(tenantWhere(payments, tenantId, eq(payments.jobId, jobId)));
+const paidSoFarCents = paymentRows
+  .filter((p) => p.status === 'succeeded')
+  .reduce((s, p) => s + p.amountCents, 0);
+const certRows = await db
+  .select()
+  .from(certificates)
+  .where(tenantWhere(certificates, tenantId, eq(certificates.jobId, jobId)));
+
+const nextStatuses = TRANSITIONS[job.status];
+const magicLink = `${Astro.url.origin}/approve/${job.clientToken}`;
+const totalCostCents = items.reduce((s, li) => s + Math.round(li.quantity * (li.unitCostCents ?? 0)), 0);
+const marginCents = job.subtotalCents - totalCostCents;
+
+// Travel logistics: one-tap call + turn-by-turn directions for the field
+const destination = customer
+  ? [customer.addressLine1, customer.city, customer.region, customer.postalCode].filter(Boolean).join(', ')
+  : '';
+const mapsUrl = destination
+  ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`
+  : null;
+const tz = tenant?.timezone;
+const assignedTech = team.find((u) => u.id === job.assignedUserId);
+const canText = twilioConfigured(env) && Boolean(tenant?.twilioNumber) && Boolean(customer?.phone);
+
+// datetime-local prefill in the tenant's timezone
+const dtLocal = job.scheduledAt
+  ? new Intl.DateTimeFormat('sv-SE', { timeZone: tz, dateStyle: 'short', timeStyle: 'short' })
+      .format(job.scheduledAt)
+      .replace(' ', 'T')
+  : '';
+
+// Time tracking + profitability
+const myOpenEntry = timeRows.find((e) => e.userId === Astro.locals.userId && !e.endedAt);
+const hoursOf = (e: { startedAt: Date; endedAt: Date | null }) =>
+  ((e.endedAt ?? new Date()).getTime() - e.startedAt.getTime()) / 3_600_000;
+const totalHours = timeRows.reduce((s, e) => s + hoursOf(e), 0);
+const labourCostCents = Math.round(
+  timeRows.reduce((s, e) => s + hoursOf(e) * (e.hourlyCostCents ?? 0), 0),
+);
+const expensesTotalCents = expenseRows.reduce((s, e) => s + e.amountCents, 0);
+const profitCents = job.subtotalCents - totalCostCents - expensesTotalCents - labourCostCents;
+const cisCents = job.cisReverseCharge ? cisDeductionCents(items) : 0;
+const balanceCents = Math.max(0, job.totalCents - cisCents - paidSoFarCents);
+---
+
+<AppShell title={job.title} active="jobs">
+  <div class="space-y-6">
+    <div>
+      <a href="/dashboard/jobs" class="text-sm text-stone-400 hover:text-stone-200">← All jobs</a>
+      <div class="mt-1 flex items-start justify-between gap-3">
+        <div>
+          <h1 class="text-xl font-bold">{job.title}</h1>
+          <p class="text-stone-400">
+            {customer?.name}{customer?.phone ? ` · ${customer.phone}` : ''}
+          </p>
+          {customer?.addressLine1 && (
+            <p class="text-sm text-stone-500">{[customer.addressLine1, customer.city, customer.region].filter(Boolean).join(', ')}</p>
+          )}
+        </div>
+        <span class="whitespace-nowrap rounded-full border border-amber-800 bg-amber-950 px-3 py-1.5 text-sm text-amber-300">
+          {STATUS_LABELS[job.status]}
+        </span>
+      </div>
+    </div>
+
+    {(customer?.phone || mapsUrl) && (
+      <div class="grid grid-cols-2 gap-2">
+        {customer?.phone && (
+          <a href={`tel:${customer.phone}`} class="flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-ink-600 bg-ink-900 font-semibold text-stone-100 hover:border-amber-500">
+            📞 Call customer
+          </a>
+        )}
+        {mapsUrl && (
+          <a href={mapsUrl} target="_blank" rel="noopener" class="flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-ink-600 bg-ink-900 font-semibold text-stone-100 hover:border-amber-500">
+            🧭 Directions
+          </a>
+        )}
+      </div>
+    )}
+
+    {canText && (
+      <div class="grid grid-cols-2 gap-2">
+        <form method="POST">
+          <input type="hidden" name="intent" value="sms-omw" />
+          <button type="submit" class="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 text-sm font-semibold text-stone-200 hover:border-amber-500">
+            🚐 Text “On my way”
+          </button>
+        </form>
+        <form method="POST">
+          <input type="hidden" name="intent" value="sms-reminder" />
+          <button type="submit" class="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 text-sm font-semibold text-stone-200 hover:border-amber-500">
+            🔔 Text reminder
+          </button>
+        </form>
+      </div>
+    )}
+
+    <div class="space-y-3 rounded-2xl border border-ink-700 bg-ink-900 p-4">
+      <form method="POST" class="flex flex-wrap items-end gap-2">
+        <input type="hidden" name="intent" value="reschedule" />
+        <label class="min-w-0 flex-1 space-y-1">
+          <span class="text-sm text-stone-400">🗓 Scheduled for</span>
+          <input name="scheduledAt" type="datetime-local" value={dtLocal} class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 text-base focus:border-amber-500 focus:outline-none" />
+        </label>
+        <button type="submit" class="min-h-12 rounded-xl border border-ink-600 px-4 text-stone-300 hover:border-amber-500">Save</button>
+      </form>
+      {!isFieldRole && (
+        <form method="POST" class="flex items-center gap-2">
+          <input type="hidden" name="intent" value="cis" />
+          <input type="hidden" name="enabled" value={job.cisReverseCharge ? '0' : '1'} />
+          <span class="flex-1 text-sm text-stone-400">
+            🏗 CIS subcontractor invoice {job.cisReverseCharge ? '(on — reverse charge VAT, 20% labour deduction)' : '(off)'}
+          </span>
+          <button type="submit" class={`min-h-12 rounded-xl border px-4 text-sm font-semibold ${job.cisReverseCharge ? 'border-emerald-700 text-emerald-400' : 'border-ink-600 text-stone-300 hover:border-amber-500'}`}>
+            {job.cisReverseCharge ? 'Turn off' : 'Turn on'}
+          </button>
+        </form>
+      )}
+      {!isFieldRole && (
+        <form method="POST" class="flex items-center gap-2">
+          <input type="hidden" name="intent" value="recurrence" />
+          <span class="text-sm text-stone-400">🔁 Repeats</span>
+          <select name="months" class="min-h-12 flex-1 rounded-xl border border-ink-600 bg-ink-950 px-3 text-base">
+            <option value="0" selected={!job.recurrenceMonths}>Never</option>
+            <option value="3" selected={job.recurrenceMonths === 3}>Every 3 months</option>
+            <option value="6" selected={job.recurrenceMonths === 6}>Every 6 months</option>
+            <option value="12" selected={job.recurrenceMonths === 12}>Every 12 months</option>
+          </select>
+          <button type="submit" class="min-h-12 rounded-xl border border-ink-600 px-4 text-stone-300 hover:border-amber-500">Save</button>
+        </form>
+      )}
+      <a href={`/api/app/pdf/${jobId}`} target="_blank" class="flex min-h-12 items-center justify-center rounded-xl border border-amber-500 text-sm font-semibold text-amber-400 hover:bg-amber-950">
+        ⬇ Download {job.status === 'invoiced' || job.status === 'paid' ? 'invoice' : 'quote'} PDF
+      </a>
+    </div>
+
+    {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
+
+    {nextStatuses.length > 0 && (
+      <div class="flex flex-wrap gap-2">
+        {nextStatuses.map((to) => (
+          <form method="POST">
+            <input type="hidden" name="intent" value="status" />
+            <input type="hidden" name="to" value={to} />
+            <button type="submit" class={`min-h-12 rounded-xl px-4 font-semibold ${to === 'cancelled' ? 'border border-ink-600 text-stone-400 hover:text-red-300' : 'bg-orange-600 text-white hover:bg-orange-500'}`}>
+              {to === 'paid' ? 'Mark paid (cash/cheque)' : `→ ${STATUS_LABELS[to]}`}
+            </button>
+          </form>
+        ))}
+      </div>
+    )}
+
+    {(job.status === 'invoiced' || job.status === 'paid') && (
+      <section class="rounded-2xl border border-amber-800/60 bg-amber-950/40 p-4">
+        <h2 class="font-semibold text-amber-300">{job.status === 'paid' ? 'Paid' : 'Customer payment link'}</h2>
+        {job.status === 'paid' ? (
+          <>
+            <p class="mt-1 text-sm text-amber-200/80">
+              Collected {job.paidAt ? fmtDateTz(job.paidAt, tz) : ''} — {money(job.totalCents)}
+            </p>
+            {paymentRows.map((p) => (
+              <p class="mt-1 text-xs text-amber-200/60">
+                {p.method.replace('_', ' ')} · {fmtMoney(p.amountCents, p.currency)} · {p.paidAt ? fmtDateTz(p.paidAt, tz) : p.status}
+              </p>
+            ))}
+          </>
+        ) : (
+          <>
+            <p class="mt-1 text-sm text-amber-200/80">Text or email this secure link — one tap to pay, no account needed:</p>
+            <input readonly value={magicLink} onclick="this.select()" class="mt-2 w-full min-h-12 rounded-xl border border-amber-800 bg-ink-950 px-3 font-mono text-xs text-amber-300" />
+            {(paidSoFarCents > 0 || cisCents > 0) && (
+              <p class="mt-2 text-sm text-amber-200/80">
+                {paidSoFarCents > 0 && `Paid so far ${money(paidSoFarCents)} · `}
+                {cisCents > 0 && `CIS deduction ${money(cisCents)} · `}
+                Balance due <span class="font-bold">{money(balanceCents)}</span>
+              </p>
+            )}
+          </>
+        )}
+      </section>
+    )}
+
+    <section class="space-y-3">
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-stone-400">Line items</h2>
+      {items.length === 0 && <p class="text-sm text-stone-500">No items yet.</p>}
+      <div class="space-y-2">
+        {items.map((li) => (
+          <div class="flex items-center justify-between gap-3 rounded-xl border border-ink-700 bg-ink-900 px-4 py-3">
+            <div class="min-w-0">
+              <p class="truncate font-medium">{li.description}</p>
+              <p class="text-sm text-stone-400">
+                {li.kind} · {li.quantity} × {money(li.unitPriceCents)}
+                {showCosts && li.unitCostCents != null && (
+                  <span class="text-stone-500"> · cost {money(li.unitCostCents)}</span>
+                )}
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="font-semibold">{money(Math.round(li.quantity * li.unitPriceCents))}</span>
+              <form method="POST">
+                <input type="hidden" name="intent" value="delete-item" />
+                <input type="hidden" name="itemId" value={li.id} />
+                <button type="submit" class="min-h-12 min-w-12 rounded-lg text-stone-500 hover:text-red-400" aria-label="Delete item">✕</button>
+              </form>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {bookItems.length > 0 && (
+        <form method="POST" class="flex gap-2">
+          <input type="hidden" name="intent" value="add-from-book" />
+          <select name="bookItemId" class="min-h-12 flex-1 rounded-xl border border-ink-600 bg-ink-900 px-3 text-base">
+            {bookItems.map((b) => (
+              <option value={b.id}>{b.description} — {money(b.unitPriceCents)}</option>
+            ))}
+          </select>
+          <button type="submit" class="min-h-12 whitespace-nowrap rounded-xl border border-amber-500 px-4 font-semibold text-amber-400 hover:bg-amber-950">Quick add</button>
+        </form>
+      )}
+
+      <form method="POST" class="space-y-3 rounded-2xl border border-ink-700 bg-ink-900 p-4">
+        <input type="hidden" name="intent" value="add-item" />
+        <div class="grid grid-cols-2 gap-3">
+          <select name="kind" class="min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 text-base">
+            <option value="labor">Labor</option>
+            <option value="material">Material</option>
+            <option value="fee">Fee</option>
+          </select>
+          <input name="quantity" type="number" step="0.25" min="0.25" value="1" required class="min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 text-base" placeholder="Qty" />
+        </div>
+        <input name="description" required placeholder="Description" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500" />
+        <div class="grid grid-cols-2 gap-3">
+          <input name="unitPrice" inputmode="decimal" required placeholder="Price each (£)" class="min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 text-base placeholder-stone-500" />
+          {showCosts && (
+            <input name="unitCost" inputmode="decimal" placeholder="Your cost (£, private)" class="min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 text-base placeholder-stone-500" />
+          )}
+        </div>
+        <button type="submit" class="w-full min-h-12 rounded-xl border border-amber-500 font-semibold text-amber-400 hover:bg-amber-950">+ Add line item</button>
+      </form>
+
+      <div class="rounded-2xl border border-ink-700 bg-ink-900 p-4 text-right">
+        {job.taxCents > 0 && (
+          <p class="text-sm text-stone-400">
+            Subtotal {money(job.subtotalCents)} · VAT {money(job.taxCents)}
+          </p>
+        )}
+        {job.cisReverseCharge && (
+          <p class="text-sm text-stone-400">
+            Reverse charge VAT · CIS deduction −{money(cisCents)}
+          </p>
+        )}
+        <p class="text-sm text-stone-400">Total</p>
+        <p class="text-2xl font-bold">{money(job.totalCents)}</p>
+        {showCosts && items.length > 0 && (
+          <p class="mt-1 text-sm text-stone-500">
+            Cost {money(totalCostCents)} · Margin <span class={marginCents >= 0 ? 'text-emerald-400' : 'text-red-400'}>{money(marginCents)}</span>
+          </p>
+        )}
+      </div>
+    </section>
+
+    <section class="space-y-2">
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-stone-400">Assigned tech</h2>
+      {isFieldRole ? (
+        <p class="rounded-xl border border-ink-700 bg-ink-900 px-4 py-3 text-stone-300">
+          {assignedTech ? `${assignedTech.name} (you)` : 'Unassigned'}
+        </p>
+      ) : (
+        <form method="POST" class="flex gap-2">
+          <input type="hidden" name="intent" value="assign" />
+          <select name="assignedUserId" class="min-h-12 flex-1 rounded-xl border border-ink-600 bg-ink-900 px-3 text-base">
+            <option value="">Unassigned</option>
+            {team.map((u) => (
+              <option value={u.id} selected={u.id === job.assignedUserId}>{u.name} ({u.role})</option>
+            ))}
+          </select>
+          <button type="submit" class="min-h-12 rounded-xl border border-ink-600 px-4 text-stone-300 hover:border-amber-500">Save</button>
+        </form>
+      )}
+    </section>
+
+    <section class="space-y-3">
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-stone-400">Photos</h2>
+      {photos.length > 0 && (
+        <div class="grid grid-cols-3 gap-2">
+          {photos.map((p) => (
+            <a href={`/api/app/photos/${p.id}`} target="_blank">
+              <img src={`/api/app/photos/${p.id}`} alt="Job photo" loading="lazy" class="aspect-square w-full rounded-xl border border-ink-700 object-cover" />
+            </a>
+          ))}
+        </div>
+      )}
+      <form method="POST" action={`/api/app/photos?jobId=${jobId}`} enctype="multipart/form-data" class="flex gap-2">
+        <input type="file" name="photo" accept="image/*" capture="environment" required class="min-h-12 flex-1 rounded-xl border border-ink-600 bg-ink-900 px-3 py-2.5 text-sm text-stone-400 file:mr-3 file:rounded-lg file:border-0 file:bg-ink-700 file:px-3 file:py-1.5 file:text-stone-200" />
+        <button type="submit" class="min-h-12 rounded-xl border border-amber-500 px-4 text-sm font-semibold text-amber-400 hover:bg-amber-950">Upload</button>
+      </form>
+    </section>
+
+    <section class="space-y-3">
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-stone-400">Certificates & forms</h2>
+      {certRows.map((c) => (
+        <a href={`/api/app/cert-pdf/${c.id}`} target="_blank" class="flex min-h-14 items-center justify-between gap-3 rounded-xl border border-ink-700 bg-ink-900 px-4 py-2.5 hover:border-amber-500/50">
+          <span>
+            <span class="block text-sm font-medium">{CERT_LABELS[c.type]}</span>
+            <span class="block text-xs text-stone-400">{c.certNumber} · {c.engineerName} · {fmtDateTz(c.issuedAt, tz)}</span>
+          </span>
+          <span class="text-sm font-semibold text-amber-400">PDF ⬇</span>
+        </a>
+      ))}
+      <div class="grid grid-cols-2 gap-2">
+        {CERT_TYPES.map((t) => (
+          <a href={`/dashboard/jobs/${jobId}/certificate?type=${t}`} class="flex min-h-12 items-center justify-center rounded-xl border border-ink-600 px-2 text-center text-xs font-semibold text-stone-300 hover:border-amber-500">
+            + {CERT_LABELS[t]}
+          </a>
+        ))}
+      </div>
+    </section>
+
+    <section class="space-y-2">
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-stone-400">Time on the job</h2>
+      <form method="POST" id="clock-form">
+        <input type="hidden" name="intent" value="clock" />
+        <input type="hidden" name="lat" id="clock-lat" />
+        <input type="hidden" name="lng" id="clock-lng" />
+        <button type="submit" class={`w-full min-h-14 rounded-2xl text-lg font-semibold ${myOpenEntry ? 'bg-red-900/70 text-red-200 border border-red-800' : 'border border-emerald-700 text-emerald-400 hover:bg-emerald-950'}`}>
+          {myOpenEntry ? `■ Clock out (in since ${fmtDateTz(myOpenEntry.startedAt, tz)})` : '▶ Clock in'}
+        </button>
+      </form>
+      {timeRows.length > 0 && (
+        <div class="rounded-2xl border border-ink-700 bg-ink-900 p-4 text-sm">
+          {timeRows.slice(0, 5).map((e) => (
+            <p class="text-stone-400">
+              {e.userName}: {fmtDateTz(e.startedAt, tz)} → {e.endedAt ? fmtDateTz(e.endedAt, tz) : 'now'} · {hoursOf(e).toFixed(1)}h
+            </p>
+          ))}
+          <p class="mt-1 font-semibold text-stone-200">Total: {totalHours.toFixed(1)} hours</p>
+        </div>
+      )}
+    </section>
+
+    <section class="space-y-2">
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-stone-400">Expenses</h2>
+      {expenseRows.map((e) => (
+        <div class="flex items-center justify-between gap-3 rounded-xl border border-ink-700 bg-ink-900 px-4 py-2.5">
+          <p class="min-w-0 truncate text-sm">{e.description}</p>
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-semibold">{money(e.amountCents)}</span>
+            <form method="POST">
+              <input type="hidden" name="intent" value="delete-expense" />
+              <input type="hidden" name="expenseId" value={e.id} />
+              <button type="submit" class="min-h-12 min-w-10 rounded-lg text-stone-500 hover:text-red-400" aria-label="Delete expense">✕</button>
+            </form>
+          </div>
+        </div>
+      ))}
+      <form method="POST" class="flex gap-2">
+        <input type="hidden" name="intent" value="add-expense" />
+        <input name="description" required placeholder="e.g. Parts from Screwfix" class="min-h-12 flex-1 rounded-xl border border-ink-600 bg-ink-900 px-4 text-base placeholder-stone-500" />
+        <input name="amount" inputmode="decimal" required placeholder="£" class="min-h-12 w-24 rounded-xl border border-ink-600 bg-ink-900 px-3 text-base placeholder-stone-500" />
+        <button type="submit" class="min-h-12 rounded-xl border border-amber-500 px-4 text-sm font-semibold text-amber-400 hover:bg-amber-950">Add</button>
+      </form>
+    </section>
+
+    {showCosts && (
+      <section class="rounded-2xl border border-ink-700 bg-ink-900 p-4">
+        <h2 class="text-sm font-semibold uppercase tracking-wide text-stone-400">Job profit (private)</h2>
+        <div class="mt-2 space-y-1 text-sm text-stone-400">
+          <p class="flex justify-between"><span>Revenue (ex VAT)</span><span>{money(job.subtotalCents)}</span></p>
+          <p class="flex justify-between"><span>Materials cost</span><span>−{money(totalCostCents)}</span></p>
+          <p class="flex justify-between"><span>Expenses</span><span>−{money(expensesTotalCents)}</span></p>
+          <p class="flex justify-between"><span>Labour ({totalHours.toFixed(1)}h)</span><span>−{money(labourCostCents)}</span></p>
+        </div>
+        <p class="mt-2 flex justify-between border-t border-ink-700 pt-2 font-bold">
+          <span>Profit</span>
+          <span class={profitCents >= 0 ? 'text-emerald-400' : 'text-red-400'}>{money(profitCents)}</span>
+        </p>
+      </section>
+    )}
+
+    <section class="space-y-3">
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-stone-400">Sign on glass</h2>
+      {sigs.map((s) => (
+        <div class="rounded-2xl border border-ink-700 bg-white p-3">
+          <img src={s.imageDataUrl} alt={`Signature from ${s.signerName}`} class="mx-auto max-h-28" />
+          <p class="mt-1 text-center text-xs text-stone-600">{s.signerName} — {fmtDateTz(s.signedAt, tz)}</p>
+        </div>
+      ))}
+      <form method="POST" id="sig-form" class="space-y-3 rounded-2xl border border-ink-700 bg-ink-900 p-4">
+        <input type="hidden" name="intent" value="sign" />
+        <input type="hidden" name="imageDataUrl" id="sig-data" />
+        <input name="signerName" required placeholder="Customer name" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500" />
+        <canvas id="sig-pad" width="640" height="200" class="w-full touch-none rounded-xl bg-white"></canvas>
+        <div class="flex gap-2">
+          <button type="button" id="sig-clear" class="min-h-12 flex-1 rounded-xl border border-ink-600 text-stone-300">Clear</button>
+          <button type="submit" class="min-h-12 flex-1 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">Save signature</button>
+        </div>
+      </form>
+    </section>
+  </div>
+</AppShell>
+
+<script>
+  const canvas = document.getElementById('sig-pad') as HTMLCanvasElement;
+  const ctx = canvas.getContext('2d')!;
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#111827';
+  let drawing = false;
+  let hasInk = false;
+
+  function pos(e: PointerEvent) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: ((e.clientX - rect.left) / rect.width) * canvas.width,
+      y: ((e.clientY - rect.top) / rect.height) * canvas.height,
+    };
+  }
+  canvas.addEventListener('pointerdown', (e) => {
+    drawing = true;
+    hasInk = true;
+    canvas.setPointerCapture(e.pointerId);
+    const p = pos(e);
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!drawing) return;
+    const p = pos(e);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+  });
+  canvas.addEventListener('pointerup', () => (drawing = false));
+
+  // GPS-stamp the clock-in (best effort, 1.5s budget, never blocks)
+  const clockForm = document.getElementById('clock-form') as HTMLFormElement | null;
+  let gpsTried = false;
+  clockForm?.addEventListener('submit', (e) => {
+    if (gpsTried || !navigator.geolocation) return;
+    e.preventDefault();
+    gpsTried = true;
+    const go = () => clockForm.submit();
+    const timer = setTimeout(go, 1500);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        clearTimeout(timer);
+        (document.getElementById('clock-lat') as HTMLInputElement).value = String(pos.coords.latitude);
+        (document.getElementById('clock-lng') as HTMLInputElement).value = String(pos.coords.longitude);
+        go();
+      },
+      () => {
+        clearTimeout(timer);
+        go();
+      },
+      { timeout: 1200, maximumAge: 60000 },
+    );
+  });
+
+  document.getElementById('sig-clear')!.addEventListener('click', () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    hasInk = false;
+  });
+  document.getElementById('sig-form')!.addEventListener('submit', (e) => {
+    if (!hasInk) {
+      e.preventDefault();
+      alert('Please draw a signature first.');
+      return;
+    }
+    (document.getElementById('sig-data') as HTMLInputElement).value = canvas.toDataURL('image/png');
+  });
+</script>

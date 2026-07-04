@@ -1,0 +1,180 @@
+---
+import '../styles/global.css';
+import { env } from 'cloudflare:workers';
+import { eq, isNull } from 'drizzle-orm';
+import { createDb, tenantWhere } from '../db';
+import { messages, tenants, users } from '../db/schema';
+
+interface Props {
+  title: string;
+  active?: 'dashboard' | 'schedule' | 'jobs' | 'inbox' | 'customers' | 'settings';
+}
+const { title, active } = Astro.props;
+const role = Astro.locals.userRole;
+
+const db = createDb(env.DB);
+const [me] = await db
+  .select({ name: users.name })
+  .from(users)
+  .where(eq(users.id, Astro.locals.userId!))
+  .limit(1);
+const [tenant] = await db
+  .select({ name: tenants.name })
+  .from(tenants)
+  .where(eq(tenants.id, Astro.locals.tenantId!))
+  .limit(1);
+const initials = (me?.name ?? '?')
+  .split(/\s+/)
+  .map((w) => w[0])
+  .slice(0, 2)
+  .join('')
+  .toUpperCase();
+
+const unreadRows = await db
+  .select({ id: messages.id })
+  .from(messages)
+  .where(tenantWhere(messages, Astro.locals.tenantId!, eq(messages.direction, 'in'), isNull(messages.readAt)));
+const unread = unreadRows.length;
+
+const nav = [
+  { id: 'dashboard', href: '/dashboard', label: 'Home', icon: 'M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10' },
+  { id: 'schedule', href: '/dashboard/schedule', label: 'Schedule', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
+  { id: 'jobs', href: '/dashboard/jobs', label: 'Jobs', icon: 'M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2m-14 0h16a1 1 0 011 1v11a1 1 0 01-1 1H4a1 1 0 01-1-1V8a1 1 0 011-1z' },
+  { id: 'inbox', href: '/dashboard/inbox', label: 'Inbox', icon: 'M8 10h8m-8 4h5m8-2a9 9 0 11-18 0 9 9 0 0118 0zm-9 9l-3-3' },
+  { id: 'customers', href: '/dashboard/customers', label: 'Customers', icon: 'M17 20v-1a4 4 0 00-4-4H7a4 4 0 00-4 4v1m18 0v-1a4 4 0 00-3-3.87M15 3.13a4 4 0 010 7.75M13 7a4 4 0 11-8 0 4 4 0 018 0z' },
+] as const;
+const adminNav = [
+  { id: 'settings', href: '/dashboard/settings', label: 'Settings', icon: 'M12 15a3 3 0 100-6 3 3 0 000 6zm7.4-3a7.4 7.4 0 00-.1-1.2l2-1.6-2-3.4-2.4 1a7.5 7.5 0 00-2-1.2L14.5 3h-5l-.4 2.6a7.5 7.5 0 00-2 1.2l-2.4-1-2 3.4 2 1.6a7.4 7.4 0 000 2.4l-2 1.6 2 3.4 2.4-1a7.5 7.5 0 002 1.2l.4 2.6h5l.4-2.6a7.5 7.5 0 002-1.2l2.4 1 2-3.4-2-1.6c.07-.4.1-.8.1-1.2z' },
+] as const;
+
+const itemClass = (id: string) =>
+  `flex min-h-12 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors ${
+    active === id ? 'bg-ink-800 text-white' : 'text-stone-400 hover:bg-ink-900 hover:text-stone-100'
+  }`;
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#151210" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <title>{title} · Pocket Ops</title>
+  </head>
+  <body class="min-h-screen bg-ink-950 text-stone-100 pb-24 lg:pb-10">
+    <!-- Sidebar (desktop) -->
+    <aside class="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-ink-700 bg-ink-950 lg:flex">
+      <a href="/dashboard" class="flex items-center gap-3 px-5 py-5">
+        <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-orange-600 to-amber-500 text-lg">⚡</span>
+        <span class="min-w-0">
+          <span class="block text-sm font-bold tracking-widest">POCKET OPS</span>
+          <span class="block truncate text-[11px] uppercase tracking-wider text-stone-500">{tenant?.name}</span>
+        </span>
+      </a>
+      <nav class="flex-1 space-y-1 overflow-y-auto px-3 pt-2">
+        {nav.map((item) => (
+          <a href={item.href} class={itemClass(item.id)}>
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d={item.icon} />
+            </svg>
+            {item.label}
+            {item.id === 'inbox' && unread > 0 && (
+              <span class="ml-auto rounded-full bg-orange-600 px-2 py-0.5 text-xs font-bold text-white">{unread}</span>
+            )}
+          </a>
+        ))}
+        <p class="px-3 pb-1 pt-5 text-[11px] font-semibold uppercase tracking-widest text-stone-600">Admin</p>
+        {adminNav.map((item) => (
+          <a href={item.href} class={itemClass(item.id)}>
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d={item.icon} />
+            </svg>
+            {item.label}
+          </a>
+        ))}
+      </nav>
+      <div class="border-t border-ink-700 p-3">
+        <div class="flex items-center gap-3 rounded-lg px-2 py-2">
+          <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-orange-600 to-amber-500 text-xs font-bold text-white">{initials}</span>
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-sm font-medium">{me?.name}</span>
+            <span class="block text-xs capitalize text-stone-500">{role}</span>
+          </span>
+          <form method="POST" action="/api/auth/logout">
+            <button type="submit" class="flex min-h-12 min-w-10 items-center justify-center rounded-lg text-stone-500 hover:text-stone-200" aria-label="Log out" title="Log out">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+            </button>
+          </form>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Top bar -->
+    <header class="sticky top-0 z-10 border-b border-ink-700 bg-ink-950/95 backdrop-blur lg:pl-60">
+      <div class="flex items-center gap-4 px-4 py-3 lg:px-8">
+        <a href="/dashboard" class="flex items-center gap-2 font-bold lg:hidden">
+          <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-600 to-amber-500 text-sm">⚡</span>
+        </a>
+        <h1 class="text-base font-bold">{title}</h1>
+        <form method="GET" action="/dashboard/jobs" class="hidden flex-1 justify-center md:flex">
+          <input
+            type="search"
+            name="q"
+            placeholder="Search jobs, customers…"
+            class="w-full max-w-md min-h-12 rounded-full border border-ink-600 bg-ink-900 px-5 text-sm placeholder-stone-500 focus:border-amber-500 focus:outline-none"
+          />
+        </form>
+        <div class="ml-auto flex items-center gap-3">
+          <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-orange-600 to-amber-500 text-xs font-bold text-white">{initials}</span>
+          <span class="hidden text-sm font-medium sm:block">{me?.name?.split(' ')[0]}</span>
+          <form method="POST" action="/api/auth/logout" class="lg:hidden">
+            <button type="submit" class="min-h-12 rounded-lg px-2 text-sm text-stone-400 hover:text-stone-100">Log out</button>
+          </form>
+        </div>
+      </div>
+    </header>
+
+    <main class="mx-auto max-w-6xl px-4 py-6 lg:pl-64 lg:pr-8 xl:mx-0 xl:max-w-none">
+      <div class="mx-auto max-w-5xl">
+        <slot />
+      </div>
+    </main>
+
+    <!-- Quick action: new job -->
+    <a
+      href="/dashboard/jobs/new"
+      class="fixed bottom-24 right-4 z-20 flex min-h-14 items-center gap-2 rounded-full bg-gradient-to-r from-orange-600 to-amber-500 px-5 font-semibold text-white shadow-lg shadow-orange-900/40 hover:from-orange-500 hover:to-amber-400 lg:bottom-6 lg:right-6"
+    >
+      <span class="text-xl leading-none">+</span> New job
+    </a>
+
+    <!-- Fat-finger bottom nav (mobile) -->
+    <nav class="fixed inset-x-0 bottom-0 z-10 border-t border-ink-700 bg-ink-950/95 backdrop-blur lg:hidden">
+      <div class="grid grid-cols-6">
+        {[...nav, ...adminNav].map((tab) => (
+          <a
+            href={tab.href}
+            class={`relative flex min-h-16 flex-col items-center justify-center gap-1 text-[10px] ${
+              active === tab.id ? 'text-amber-400' : 'text-stone-400 hover:text-stone-200'
+            }`}
+          >
+            <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d={tab.icon} />
+            </svg>
+            {tab.label}
+            {tab.id === 'inbox' && unread > 0 && (
+              <span class="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-orange-500" />
+            )}
+          </a>
+        ))}
+      </div>
+    </nav>
+
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      }
+    </script>
+  </body>
+</html>

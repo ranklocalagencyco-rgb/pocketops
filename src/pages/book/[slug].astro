@@ -1,0 +1,105 @@
+---
+/**
+ * Public booking / work-request form — embed the link on a website or Google
+ * Business Profile. Creates a lead in the pipeline and (if Twilio is set up)
+ * texts the business owner.
+ */
+import '../../styles/global.css';
+import { env } from 'cloudflare:workers';
+import { eq } from 'drizzle-orm';
+import { createDb, tenantValues, tenantWhere } from '../../db';
+import { customers, jobs, tenants } from '../../db/schema';
+import { newClientToken, newId } from '../../lib/ids';
+import { sendSms, twilioConfigured } from '../../lib/twilio';
+
+const slug = Astro.params.slug ?? '';
+const db = createDb(env.DB);
+const [tenant] = await db.select().from(tenants).where(eq(tenants.slug, slug)).limit(1);
+if (!tenant) return new Response('Not found', { status: 404 });
+
+let submitted = false;
+let error = '';
+if (Astro.request.method === 'POST') {
+  try {
+    const form = await Astro.request.formData();
+    const name = String(form.get('name') ?? '').trim().slice(0, 80);
+    const phone = String(form.get('phone') ?? '').trim().slice(0, 20);
+    const description = String(form.get('description') ?? '').trim().slice(0, 1000);
+    const addressLine1 = String(form.get('address') ?? '').trim().slice(0, 120) || null;
+    const postalCode = String(form.get('postcode') ?? '').trim().slice(0, 12) || null;
+
+    if (!name || !phone || !description) {
+      error = 'Name, phone, and a few words about the job are required.';
+    } else {
+      // Find-or-create the customer by phone
+      const [existing] = await db
+        .select({ id: customers.id })
+        .from(customers)
+        .where(tenantWhere(customers, tenant.id, eq(customers.phone, phone)))
+        .limit(1);
+      let customerId = existing?.id;
+      if (!customerId) {
+        customerId = newId();
+        await db.insert(customers).values(
+          tenantValues(tenant.id, { id: customerId, name, phone, addressLine1, postalCode }),
+        );
+      }
+      await db.insert(jobs).values(
+        tenantValues(tenant.id, {
+          id: newId(),
+          customerId,
+          title: description.slice(0, 60),
+          description,
+          clientToken: newClientToken(),
+        }),
+      );
+      if (twilioConfigured(env) && tenant.twilioNumber && tenant.phone) {
+        await sendSms(env, {
+          to: tenant.phone,
+          from: tenant.twilioNumber,
+          body: `New enquiry via your booking page: ${name} (${phone}) — "${description.slice(0, 100)}"`,
+        });
+      }
+      submitted = true;
+    }
+  } catch {
+    error = 'Something went wrong — please try again or give us a call.';
+  }
+}
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Request a quote · {tenant.name}</title>
+  </head>
+  <body class="min-h-screen bg-zinc-100 text-zinc-900 flex items-center justify-center p-4">
+    <main class="w-full max-w-md space-y-5">
+      <header class="text-center">
+        <h1 class="text-2xl font-bold">{tenant.name}</h1>
+        <p class="mt-1 text-zinc-500">Tell us about the job and we'll get straight back to you.</p>
+      </header>
+
+      {submitted ? (
+        <div class="rounded-2xl border border-emerald-300 bg-emerald-50 p-6 text-center">
+          <p class="text-3xl">✓</p>
+          <p class="mt-2 text-lg font-semibold text-emerald-800">Request received!</p>
+          <p class="mt-1 text-sm text-emerald-700">We'll be in touch shortly{tenant.phone ? ` — or call us on ${tenant.phone}` : ''}.</p>
+        </div>
+      ) : (
+        <form method="POST" class="space-y-3 rounded-2xl bg-white p-5 shadow-sm">
+          {error && <p class="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+          <input name="name" required placeholder="Your name" class="w-full min-h-12 rounded-xl border border-zinc-300 px-4 text-base" />
+          <input name="phone" type="tel" required placeholder="Mobile number" class="w-full min-h-12 rounded-xl border border-zinc-300 px-4 text-base" />
+          <div class="grid grid-cols-[1fr_auto] gap-3">
+            <input name="address" placeholder="Address (optional)" class="w-full min-h-12 rounded-xl border border-zinc-300 px-4 text-base" />
+            <input name="postcode" placeholder="Postcode" class="w-28 min-h-12 rounded-xl border border-zinc-300 px-4 text-base" />
+          </div>
+          <textarea name="description" required rows="4" placeholder="What needs doing? e.g. Leaking radiator in the front bedroom" class="w-full rounded-xl border border-zinc-300 px-4 py-3 text-base"></textarea>
+          <button type="submit" class="w-full min-h-14 rounded-2xl bg-zinc-900 text-lg font-semibold text-white active:scale-[0.99]">Request a quote</button>
+        </form>
+      )}
+    </main>
+  </body>
+</html>

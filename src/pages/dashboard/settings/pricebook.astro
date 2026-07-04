@@ -1,0 +1,154 @@
+---
+import { env } from 'cloudflare:workers';
+import { asc, eq } from 'drizzle-orm';
+import AppShell from '../../../layouts/AppShell.astro';
+import { createDb, tenantValues, tenantWhere } from '../../../db';
+import { priceBookItems } from '../../../db/schema';
+import { newId } from '../../../lib/ids';
+import { fmtMoney, parseMoney } from '../../../lib/jobs';
+import { canSeeFinancials } from '../../../lib/masking';
+
+if (!canSeeFinancials(Astro.locals.userRole!)) return Astro.redirect('/dashboard/settings');
+const tenantId = Astro.locals.tenantId!;
+const db = createDb(env.DB);
+
+let notice = '';
+let error = '';
+if (Astro.request.method === 'POST') {
+  try {
+    const form = await Astro.request.formData();
+    const intent = String(form.get('intent') ?? '');
+    if (intent === 'add') {
+      const description = String(form.get('description') ?? '').trim();
+      const unitPriceCents = parseMoney(form.get('unitPrice'));
+      const unitCostCents = parseMoney(form.get('unitCost'));
+      const kind = String(form.get('kind') ?? 'labor');
+      if (!description || unitPriceCents === null) {
+        error = 'Items need a description and a price.';
+      } else {
+        await db.insert(priceBookItems).values(
+          tenantValues(tenantId, {
+            id: newId(),
+            kind: (['labor', 'material', 'fee'].includes(kind) ? kind : 'labor') as 'labor' | 'material' | 'fee',
+            description,
+            unitPriceCents,
+            unitCostCents,
+          }),
+        );
+        notice = 'Item added to the price book.';
+      }
+    } else if (intent === 'import') {
+      // Supplier price-file import: "description, cost, price(optional)" per
+      // line; when price is blank, the markup % sets it from cost.
+      const kind = String(form.get('kind') ?? 'material');
+      const markup = Number(form.get('markup') ?? 0);
+      const lines = String(form.get('csv') ?? '').split(/\r?\n/).slice(0, 200);
+      let imported = 0;
+      for (const line of lines) {
+        const [desc, costRaw, priceRaw] = line.split(',').map((s) => s?.trim() ?? '');
+        if (!desc) continue;
+        const cost = parseMoney(costRaw ?? '');
+        let price = parseMoney(priceRaw ?? '');
+        if (price === null && cost !== null && Number.isFinite(markup) && markup >= 0) {
+          price = Math.round(cost * (1 + markup / 100));
+        }
+        if (price === null) continue;
+        await db.insert(priceBookItems).values(
+          tenantValues(tenantId, {
+            id: newId(),
+            kind: (['labor', 'material', 'fee'].includes(kind) ? kind : 'material') as 'labor' | 'material' | 'fee',
+            description: desc.slice(0, 120),
+            unitPriceCents: price,
+            unitCostCents: cost,
+          }),
+        );
+        imported++;
+      }
+      notice = `${imported} item${imported === 1 ? '' : 's'} imported.`;
+    } else if (intent === 'delete') {
+      const itemId = String(form.get('itemId') ?? '');
+      await db
+        .delete(priceBookItems)
+        .where(tenantWhere(priceBookItems, tenantId, eq(priceBookItems.id, itemId)));
+      notice = 'Item removed.';
+    }
+  } catch {
+    error = 'That change failed. Please try again.';
+  }
+}
+
+const items = await db
+  .select()
+  .from(priceBookItems)
+  .where(tenantWhere(priceBookItems, tenantId, eq(priceBookItems.isActive, true)))
+  .orderBy(asc(priceBookItems.kind), asc(priceBookItems.description));
+---
+
+<AppShell title="Price Book" active="settings">
+  <div class="mx-auto max-w-xl space-y-5">
+    <div>
+      <a href="/dashboard/settings" class="text-sm text-stone-400 hover:text-stone-200">← Settings</a>
+      <h2 class="mt-1 text-2xl font-bold">Price Book</h2>
+      <p class="text-sm text-stone-400">One-tap line items on any job. Costs stay private to owners and admins.</p>
+    </div>
+    {notice && <p class="rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300">{notice}</p>}
+    {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
+
+    <form method="POST" class="space-y-3 rounded-2xl border border-ink-700 bg-ink-900 p-4">
+      <input type="hidden" name="intent" value="add" />
+      <div class="grid grid-cols-2 gap-3">
+        <select name="kind" class="min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 text-base focus:border-amber-500 focus:outline-none">
+          <option value="labor">Labor</option>
+          <option value="material">Material</option>
+          <option value="fee">Fee</option>
+        </select>
+        <input name="unitPrice" inputmode="decimal" required placeholder="Price (£)" class="min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+      </div>
+      <input name="description" required placeholder="Description (e.g. Service call-out fee)" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+      <input name="unitCost" inputmode="decimal" placeholder="Your cost (£, private — optional)" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+      <button type="submit" class="w-full min-h-12 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">Add item</button>
+    </form>
+
+    <details class="rounded-2xl border border-ink-700 bg-ink-900">
+      <summary class="flex min-h-12 cursor-pointer items-center px-4 text-sm font-semibold text-amber-400">📥 Import supplier price file (CSV)</summary>
+      <form method="POST" class="space-y-3 border-t border-ink-700 p-4">
+        <input type="hidden" name="intent" value="import" />
+        <p class="text-xs text-stone-500">One item per line: <span class="font-mono">description, cost, price</span>. Leave price blank to apply your markup to the cost — works with exported Screwfix/Toolstation/merchant trade lists.</p>
+        <textarea name="csv" rows="5" required placeholder="15mm copper pipe 3m, 4.85&#10;Worcester 4000 30kW combi, 1180, 1595" class="w-full rounded-xl border border-ink-600 bg-ink-950 px-4 py-3 font-mono text-sm placeholder-stone-600 focus:border-amber-500 focus:outline-none"></textarea>
+        <div class="grid grid-cols-2 gap-3">
+          <select name="kind" class="min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 text-base">
+            <option value="material">Materials</option>
+            <option value="labor">Labour</option>
+            <option value="fee">Fees</option>
+          </select>
+          <input name="markup" inputmode="decimal" value="40" class="min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 text-base" title="Markup %" />
+        </div>
+        <button type="submit" class="w-full min-h-12 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">Import with markup %</button>
+      </form>
+    </details>
+
+    {items.length === 0 && (
+      <p class="rounded-2xl border border-dashed border-ink-600 p-8 text-center text-sm text-stone-500">
+        No items yet. Add your common call-out fees, hourly rates, and stock materials.
+      </p>
+    )}
+    <div class="space-y-2">
+      {items.map((item) => (
+        <div class="flex items-center justify-between gap-3 rounded-2xl border border-ink-700 bg-ink-900 px-4 py-3">
+          <div class="min-w-0">
+            <p class="truncate font-medium">{item.description}</p>
+            <p class="text-sm text-stone-400">
+              {item.kind} · {fmtMoney(item.unitPriceCents)}
+              {item.unitCostCents != null && <span class="text-stone-500"> · cost {fmtMoney(item.unitCostCents)}</span>}
+            </p>
+          </div>
+          <form method="POST">
+            <input type="hidden" name="intent" value="delete" />
+            <input type="hidden" name="itemId" value={item.id} />
+            <button type="submit" class="min-h-12 min-w-12 rounded-lg text-stone-500 hover:text-red-400" aria-label={`Remove ${item.description}`}>✕</button>
+          </form>
+        </div>
+      ))}
+    </div>
+  </div>
+</AppShell>

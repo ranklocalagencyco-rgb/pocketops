@@ -1,0 +1,70 @@
+---
+import { env } from 'cloudflare:workers';
+import { eq } from 'drizzle-orm';
+import AppShell from '../../../layouts/AppShell.astro';
+import { createDb } from '../../../db';
+import { tenants } from '../../../db/schema';
+import { canSeeFinancials } from '../../../lib/masking';
+import { twilioConfigured } from '../../../lib/twilio';
+
+if (!canSeeFinancials(Astro.locals.userRole!)) return Astro.redirect('/dashboard/settings');
+const tenantId = Astro.locals.tenantId!;
+const db = createDb(env.DB);
+
+let notice = '';
+let error = '';
+if (Astro.request.method === 'POST') {
+  try {
+    const form = await Astro.request.formData();
+    await db
+      .update(tenants)
+      .set({
+        twilioNumber: String(form.get('twilioNumber') ?? '').trim() || null,
+        missedCallMessage: String(form.get('missedCallMessage') ?? '').trim() || null,
+      })
+      .where(eq(tenants.id, tenantId));
+    notice = 'Messaging settings saved.';
+  } catch {
+    error = 'Could not save — that Twilio number may already be in use by another workspace.';
+  }
+}
+
+const [tenant] = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+const twilioReady = twilioConfigured(env);
+const webhookUrl = `${env.APP_URL || Astro.url.origin}/api/webhooks/twilio`;
+---
+
+<AppShell title="Messaging" active="settings">
+  <div class="mx-auto max-w-xl space-y-5">
+    <div>
+      <a href="/dashboard/settings" class="text-sm text-stone-400 hover:text-stone-200">← Settings</a>
+      <h2 class="mt-1 text-2xl font-bold">Messaging</h2>
+      <p class="text-sm text-stone-400">Missed calls get an instant text back so the lead never goes cold.</p>
+    </div>
+    {notice && <p class="rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300">{notice}</p>}
+    {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
+
+    <p class={`rounded-xl border px-4 py-3 text-sm ${twilioReady ? 'border-emerald-800 bg-emerald-950 text-emerald-300' : 'border-ink-700 bg-ink-900 text-stone-400'}`}>
+      {twilioReady ? '● Twilio connected' : '○ Twilio not connected — set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in your Cloudflare secrets.'}
+    </p>
+
+    <form method="POST" class="space-y-4 rounded-2xl border border-ink-700 bg-ink-900 p-5">
+      <label class="block space-y-1">
+        <span class="text-sm text-stone-400">Your Twilio number (E.164)</span>
+        <input name="twilioNumber" value={tenant?.twilioNumber ?? ''} placeholder="+447700900123" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+      </label>
+      <label class="block space-y-1">
+        <span class="text-sm text-stone-400">Text-back message</span>
+        <textarea name="missedCallMessage" rows="3" placeholder={`Sorry we missed your call — this is ${tenant?.name}. Reply here and we'll get right back to you!`} class="w-full rounded-xl border border-ink-600 bg-ink-950 px-4 py-3 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none">{tenant?.missedCallMessage ?? ''}</textarea>
+        <span class="block text-xs text-stone-500">Use {'{name}'} to greet known customers by first name. Leave blank for the default message.</span>
+      </label>
+      <button type="submit" class="w-full min-h-12 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">Save changes</button>
+    </form>
+
+    <div class="rounded-2xl border border-ink-700 bg-ink-900 p-5 text-sm">
+      <p class="font-semibold">Twilio setup</p>
+      <p class="mt-1 text-stone-400">In your Twilio number's Voice settings, set the call status callback to:</p>
+      <input readonly value={webhookUrl} onclick="this.select()" class="mt-2 w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 font-mono text-xs text-amber-300" />
+    </div>
+  </div>
+</AppShell>

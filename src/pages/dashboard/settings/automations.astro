@@ -1,0 +1,71 @@
+---
+import { env } from 'cloudflare:workers';
+import { eq, isNotNull } from 'drizzle-orm';
+import AppShell from '../../../layouts/AppShell.astro';
+import { createDb, tenantWhere } from '../../../db';
+import { jobs } from '../../../db/schema';
+import { canSeeFinancials } from '../../../lib/masking';
+
+if (!canSeeFinancials(Astro.locals.userRole!)) return Astro.redirect('/dashboard/settings');
+const tenantId = Astro.locals.tenantId!;
+const db = createDb(env.DB);
+
+const chasing = await db
+  .select({ id: jobs.id, title: jobs.title, chaseCount: jobs.chaseCount })
+  .from(jobs)
+  .where(tenantWhere(jobs, tenantId, eq(jobs.status, 'invoiced')));
+const recurring = await db
+  .select({ id: jobs.id, title: jobs.title, recurrenceMonths: jobs.recurrenceMonths })
+  .from(jobs)
+  .where(tenantWhere(jobs, tenantId, isNotNull(jobs.recurrenceMonths)));
+const cronConfigured = Boolean(env.CRON_SECRET);
+const cronUrl = `${env.APP_URL || Astro.url.origin}/api/cron/daily`;
+---
+
+<AppShell title="Automations" active="settings">
+  <div class="mx-auto max-w-xl space-y-5">
+    <div>
+      <a href="/dashboard/settings" class="text-sm text-stone-400 hover:text-stone-200">← Settings</a>
+      <h2 class="mt-1 text-2xl font-bold">Automations</h2>
+      <p class="text-sm text-stone-400">Runs daily: chases unpaid invoices by text and books in recurring service work.</p>
+    </div>
+
+    <div class="rounded-2xl border border-ink-700 bg-ink-900 p-5">
+      <p class="font-semibold">Invoice chasing</p>
+      <p class="mt-1 text-sm text-stone-400">
+        Unpaid invoices get a polite text with the payment link after 7 days, re-nudged weekly, three times max.
+        {chasing.length > 0 ? ` Currently watching ${chasing.length} unpaid invoice${chasing.length === 1 ? '' : 's'}.` : ' No unpaid invoices right now.'}
+      </p>
+      <p class="mt-3 font-semibold">Recurring services</p>
+      <p class="mt-1 text-sm text-stone-400">
+        Jobs set to repeat spawn a new lead two weeks before the service is due, and the customer gets a heads-up text.
+        {recurring.length > 0 ? ` ${recurring.length} job${recurring.length === 1 ? '' : 's'} set to repeat.` : ' Set "Repeats" on any job to start.'}
+      </p>
+      <button id="run-now" class="mt-4 w-full min-h-12 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">Run now</button>
+      <p id="run-result" class="mt-2 hidden rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300"></p>
+    </div>
+
+    <div class="rounded-2xl border border-ink-700 bg-ink-900 p-5 text-sm">
+      <p class="font-semibold">Daily schedule</p>
+      <p class={`mt-1 ${cronConfigured ? 'text-emerald-400' : 'text-stone-400'}`}>
+        {cronConfigured ? '● CRON_SECRET is set.' : '○ Set a CRON_SECRET in your Cloudflare secrets, then'} POST to this URL once a day with the header <span class="font-mono text-xs">Authorization: Bearer &lt;CRON_SECRET&gt;</span> from a Cloudflare Worker cron trigger or any scheduler:
+      </p>
+      <input readonly value={cronUrl} onclick="this.select()" class="mt-2 w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 font-mono text-xs text-amber-300" />
+    </div>
+  </div>
+</AppShell>
+
+<script>
+  document.getElementById('run-now')!.addEventListener('click', async () => {
+    const out = document.getElementById('run-result')!;
+    out.classList.remove('hidden');
+    out.textContent = 'Running…';
+    try {
+      const res = await fetch('/api/cron/daily', { method: 'POST' });
+      const json = (await res.json()) as { chased: number; recurringSpawned: number };
+      out.textContent = `Done — ${json.chased} invoice chase${json.chased === 1 ? '' : 's'} sent, ${json.recurringSpawned} recurring job${json.recurringSpawned === 1 ? '' : 's'} created.`;
+    } catch {
+      out.textContent = 'Run failed — try again.';
+    }
+  });
+</script>

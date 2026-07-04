@@ -1,0 +1,95 @@
+---
+import { env } from 'cloudflare:workers';
+import { desc, eq } from 'drizzle-orm';
+import AppShell from '../../../layouts/AppShell.astro';
+import { createDb, tenantWhere } from '../../../db';
+import { accountingConnections, jobs, ledgerSyncRecords, tenants } from '../../../db/schema';
+import { isProvider, providerConfigured } from '../../../lib/accounting';
+import { fmtDateTz } from '../../../lib/jobs';
+import { canSeeFinancials } from '../../../lib/masking';
+
+if (!canSeeFinancials(Astro.locals.userRole!)) return Astro.redirect('/dashboard/settings');
+const tenantId = Astro.locals.tenantId!;
+const db = createDb(env.DB);
+
+const [tenant] = await db
+  .select({ timezone: tenants.timezone })
+  .from(tenants)
+  .where(eq(tenants.id, tenantId))
+  .limit(1);
+const connections = await db
+  .select()
+  .from(accountingConnections)
+  .where(tenantWhere(accountingConnections, tenantId));
+const history = await db
+  .select({
+    id: ledgerSyncRecords.id,
+    status: ledgerSyncRecords.status,
+    externalId: ledgerSyncRecords.externalId,
+    error: ledgerSyncRecords.error,
+    createdAt: ledgerSyncRecords.createdAt,
+    jobTitle: jobs.title,
+  })
+  .from(ledgerSyncRecords)
+  .innerJoin(jobs, eq(ledgerSyncRecords.jobId, jobs.id))
+  .where(tenantWhere(ledgerSyncRecords, tenantId))
+  .orderBy(desc(ledgerSyncRecords.createdAt))
+  .limit(10);
+
+const providers = [
+  { id: 'quickbooks', label: 'QuickBooks Online' },
+  { id: 'xero', label: 'Xero' },
+].map((p) => ({
+  ...p,
+  configured: isProvider(p.id) && providerConfigured(p.id, env),
+  connection: connections.find((c) => c.provider === p.id),
+}));
+const connectedFlash = Astro.url.searchParams.get('connected');
+---
+
+<AppShell title="Accounting Sync" active="settings">
+  <div class="mx-auto max-w-xl space-y-5">
+    <div>
+      <a href="/dashboard/settings" class="text-sm text-stone-400 hover:text-stone-200">← Settings</a>
+      <h2 class="mt-1 text-2xl font-bold">Accounting Sync</h2>
+      <p class="text-sm text-stone-400">Paid invoices push into your ledger automatically.</p>
+    </div>
+    {connectedFlash && <p class="rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300">{connectedFlash} connected.</p>}
+
+    <div class="space-y-2">
+      {providers.map((p) => (
+        <div class="flex items-center justify-between gap-3 rounded-2xl border border-ink-700 bg-ink-900 px-4 py-3">
+          <div>
+            <p class="font-medium">{p.label}</p>
+            <p class="text-sm text-stone-400">
+              {p.connection?.status === 'active'
+                ? 'Connected — paid invoices sync automatically'
+                : p.configured
+                  ? 'Ready to connect'
+                  : 'Add API credentials to your Cloudflare secrets first'}
+            </p>
+          </div>
+          {p.configured && p.connection?.status !== 'active' && (
+            <a href={`/api/integrations/${p.id}/connect`} class="flex min-h-12 items-center rounded-xl border border-amber-500 px-4 text-sm font-semibold text-amber-400 hover:bg-amber-950">Connect</a>
+          )}
+          {p.connection?.status === 'active' && <span class="text-emerald-400">●</span>}
+        </div>
+      ))}
+    </div>
+
+    <div class="rounded-2xl border border-ink-700 bg-ink-900 p-5">
+      <p class="font-semibold">Sync history</p>
+      {history.length === 0 ? (
+        <p class="mt-2 text-sm text-stone-500">Nothing synced yet — history appears after the first paid invoice.</p>
+      ) : (
+        <div class="mt-2 space-y-1.5 text-sm">
+          {history.map((r) => (
+            <p class={r.status === 'error' ? 'text-red-300' : 'text-stone-400'}>
+              {r.status === 'synced' ? '✓' : r.status === 'error' ? '✕' : '…'} {r.jobTitle} — {r.status === 'synced' ? `ledger id ${r.externalId}` : r.error ?? 'pending'} · {fmtDateTz(r.createdAt, tenant?.timezone)}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+</AppShell>

@@ -1,0 +1,286 @@
+---
+import { env } from 'cloudflare:workers';
+import { desc, eq } from 'drizzle-orm';
+import AppShell from '../../layouts/AppShell.astro';
+import { createDb, tenantWhere } from '../../db';
+import { callEvents, customers, jobs, tenants, users, type JobStatus } from '../../db/schema';
+import { fmtDateTz, fmtMoney, STATUS_LABELS } from '../../lib/jobs';
+import { canSeeFinancials } from '../../lib/masking';
+
+const tenantId = Astro.locals.tenantId!;
+const role = Astro.locals.userRole!;
+// Field roles see only their assigned work orders
+const isFieldRole = role === 'technician' || role === 'apprentice';
+const db = createDb(env.DB);
+
+const [me] = await db
+  .select({ name: users.name })
+  .from(users)
+  .where(eq(users.id, Astro.locals.userId!))
+  .limit(1);
+const [tenant] = await db
+  .select({ name: tenants.name, timezone: tenants.timezone, currency: tenants.currency })
+  .from(tenants)
+  .where(eq(tenants.id, tenantId))
+  .limit(1);
+const tz = tenant?.timezone ?? 'America/New_York';
+
+const allJobs = await db
+  .select({
+    id: jobs.id,
+    title: jobs.title,
+    status: jobs.status,
+    totalCents: jobs.totalCents,
+    createdAt: jobs.createdAt,
+    paidAt: jobs.paidAt,
+    scheduledAt: jobs.scheduledAt,
+    customerName: customers.name,
+  })
+  .from(jobs)
+  .innerJoin(customers, eq(jobs.customerId, customers.id))
+  .where(
+    tenantWhere(
+      jobs,
+      tenantId,
+      isFieldRole ? eq(jobs.assignedUserId, Astro.locals.userId!) : undefined,
+    ),
+  )
+  .orderBy(desc(jobs.updatedAt));
+
+// Module 7 visibility: recent missed calls + text-back status
+const missedCalls = await db
+  .select({
+    id: callEvents.id,
+    fromNumber: callEvents.fromNumber,
+    createdAt: callEvents.createdAt,
+    textBackSentAt: callEvents.textBackSentAt,
+    customerName: customers.name,
+  })
+  .from(callEvents)
+  .leftJoin(customers, eq(callEvents.matchedCustomerId, customers.id))
+  .where(tenantWhere(callEvents, tenantId, eq(callEvents.status, 'missed')))
+  .orderBy(desc(callEvents.createdAt))
+  .limit(5);
+
+// Greeting in the tenant's timezone
+const hour = Number(
+  new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz }).format(new Date()),
+);
+const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+const today = new Intl.DateTimeFormat('en-GB', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+  timeZone: tz,
+}).format(new Date());
+
+// KPIs
+const now = Date.now();
+const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+const openJobs = allJobs.filter((j) => j.status !== 'paid' && j.status !== 'cancelled');
+const monthKey = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: '2-digit', timeZone: tz });
+const thisMonth = monthKey.format(new Date());
+const collectedMonthCents = allJobs
+  .filter((j) => j.status === 'paid' && j.paidAt && monthKey.format(j.paidAt) === thisMonth)
+  .reduce((s, j) => s + j.totalCents, 0);
+const paidThisMonth = allJobs.filter(
+  (j) => j.status === 'paid' && j.paidAt && monthKey.format(j.paidAt) === thisMonth,
+).length;
+const newThisWeek = allJobs.filter((j) => j.createdAt.getTime() >= weekAgo).length;
+const dayKey = new Intl.DateTimeFormat('en-US', { dateStyle: 'short', timeZone: tz });
+const todayKey = dayKey.format(new Date());
+const todaysJobs = allJobs
+  .filter((j) => j.scheduledAt && dayKey.format(j.scheduledAt) === todayKey)
+  .sort((a, b) => a.scheduledAt!.getTime() - b.scheduledAt!.getTime());
+
+const showRevenue = canSeeFinancials(role);
+const cards = [
+  { label: isFieldRole ? 'My open jobs' : 'Open jobs', value: String(openJobs.length), sub: 'in the pipeline' },
+  showRevenue
+    ? { label: 'Collected this month', value: fmtMoney(collectedMonthCents, tenant?.currency), sub: `${paidThisMonth} ${paidThisMonth === 1 ? 'job' : 'jobs'} paid` }
+    : { label: 'Completed', value: String(allJobs.filter((j) => j.status === 'completed').length), sub: 'awaiting invoice' },
+  { label: 'New this week', value: String(newThisWeek), sub: 'jobs created' },
+  { label: 'My appointments', value: String(todaysJobs.length), sub: 'today' },
+];
+const cardIcons = [
+  'M4 6h16M4 12h10M4 18h7',
+  'M12 8c-2 0-3 .9-3 2s1 1.7 3 2 3 .9 3 2-1 2-3 2m0-8c1.3 0 2.4.5 2.8 1.3M12 8V6m0 12v-2m0-8c-1.3 0-2.4.5-2.8 1.3M12 16c1.3 0 2.4-.5 2.8-1.3',
+  'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6',
+  'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
+];
+
+// Pipeline
+const PIPELINE: JobStatus[] = ['lead', 'quoted', 'approved', 'scheduled', 'in_progress', 'completed', 'invoiced', 'paid'];
+const stageStyle: Record<JobStatus, { dot: string; bar: string; pill: string }> = {
+  lead: { dot: 'bg-sky-400', bar: 'bg-sky-400', pill: 'bg-sky-950 text-sky-300 border-sky-800' },
+  quoted: { dot: 'bg-violet-400', bar: 'bg-violet-400', pill: 'bg-violet-950 text-violet-300 border-violet-800' },
+  approved: { dot: 'bg-cyan-400', bar: 'bg-cyan-400', pill: 'bg-cyan-950 text-cyan-300 border-cyan-800' },
+  scheduled: { dot: 'bg-blue-400', bar: 'bg-blue-400', pill: 'bg-blue-950 text-blue-300 border-blue-800' },
+  in_progress: { dot: 'bg-amber-400', bar: 'bg-amber-400', pill: 'bg-amber-950 text-amber-300 border-amber-800' },
+  completed: { dot: 'bg-lime-400', bar: 'bg-lime-400', pill: 'bg-lime-950 text-lime-300 border-lime-800' },
+  invoiced: { dot: 'bg-orange-400', bar: 'bg-orange-400', pill: 'bg-orange-950 text-orange-300 border-orange-800' },
+  paid: { dot: 'bg-emerald-400', bar: 'bg-emerald-400', pill: 'bg-emerald-950 text-emerald-300 border-emerald-800' },
+  cancelled: { dot: 'bg-slate-500', bar: 'bg-slate-500', pill: 'bg-ink-800 text-stone-400 border-ink-600' },
+};
+const counts = Object.fromEntries(PIPELINE.map((s) => [s, 0])) as Record<JobStatus, number>;
+for (const j of allJobs) if (j.status in counts) counts[j.status]++;
+const pipelineTotal = PIPELINE.reduce((s, k) => s + counts[k], 0);
+const maxCount = Math.max(1, ...PIPELINE.map((k) => counts[k]));
+const recent = allJobs.slice(0, 6);
+---
+
+<AppShell title="Dashboard" active="dashboard">
+  <div class="space-y-6">
+    <div class="flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <p class="text-[11px] font-semibold uppercase tracking-widest text-stone-500">{tenant?.name}</p>
+        <h2 class="mt-1 text-3xl font-bold">{greeting}, {me?.name?.split(' ')[0]}</h2>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="text-sm text-stone-400">{today}</span>
+        <a href="/dashboard/jobs" class="flex min-h-12 items-center rounded-xl bg-orange-600 px-4 font-semibold text-white hover:bg-orange-500">View jobs</a>
+      </div>
+    </div>
+
+    <!-- KPI cards -->
+    <div class="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      {cards.map((card, i) => (
+        <div class="rounded-2xl bg-gradient-to-r from-orange-700 via-orange-600 to-amber-500 p-4">
+          <div class="flex items-start gap-3">
+            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/20">
+              <svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d={cardIcons[i]} />
+              </svg>
+            </span>
+            <div class="min-w-0">
+              <p class="truncate text-[11px] font-semibold uppercase tracking-wider text-white/80">{card.label}</p>
+              <p class="mt-1 text-2xl font-bold text-white xl:text-3xl">{card.value}</p>
+              <p class="text-xs text-white/75">{card.sub}</p>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+
+    <div class="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+      <!-- Pipeline -->
+      <section class="rounded-2xl border border-ink-700 bg-ink-900 p-5">
+        <div class="flex items-baseline justify-between">
+          <div>
+            <h3 class="font-bold">Pipeline</h3>
+            <p class="text-sm text-stone-400">{pipelineTotal} {pipelineTotal === 1 ? 'job' : 'jobs'} in the pipeline</p>
+          </div>
+          <a href="/dashboard/jobs" class="text-sm text-amber-400 hover:underline">View board →</a>
+        </div>
+        {pipelineTotal > 0 && (
+          <div class="mt-4 flex h-1.5 gap-1 overflow-hidden rounded-full">
+            {PIPELINE.filter((s) => counts[s] > 0).map((s) => (
+              <span class={`${stageStyle[s].bar} rounded-full`} style={`width: ${(counts[s] / pipelineTotal) * 100}%`} />
+            ))}
+          </div>
+        )}
+        <div class="mt-5 space-y-3">
+          {PIPELINE.map((s) => (
+            <a href={`/dashboard/jobs?status=${s}`} class="group flex items-center gap-3">
+              <span class={`h-2 w-2 shrink-0 rounded-full ${stageStyle[s].dot}`} />
+              <span class="w-28 shrink-0 text-sm text-stone-300 group-hover:text-white">{STATUS_LABELS[s]}</span>
+              <span class="h-1 flex-1 overflow-hidden rounded-full bg-ink-700">
+                <span class={`block h-full rounded-full ${stageStyle[s].bar}`} style={`width: ${(counts[s] / maxCount) * 100}%`} />
+              </span>
+              <span class="w-8 text-right text-sm font-semibold">{counts[s]}</span>
+            </a>
+          ))}
+        </div>
+      </section>
+
+      <!-- Today -->
+      <section class="flex flex-col rounded-2xl border border-ink-700 bg-ink-900 p-5">
+        <div class="flex items-baseline justify-between">
+          <h3 class="font-bold">Today</h3>
+          <span class="text-xs text-stone-500">{todaysJobs.length} appts</span>
+        </div>
+        {todaysJobs.length === 0 ? (
+          <div class="flex flex-1 flex-col items-center justify-center gap-2 py-10 text-center">
+            <span class="flex h-12 w-12 items-center justify-center rounded-full bg-ink-800 text-xl">⚡</span>
+            <p class="text-sm text-stone-400">Nothing scheduled today.</p>
+            <a href="/dashboard/jobs?status=scheduled" class="text-sm text-amber-400 hover:underline">View scheduled →</a>
+          </div>
+        ) : (
+          <div class="mt-3 space-y-2">
+            {todaysJobs.map((j) => (
+              <a href={`/dashboard/jobs/${j.id}`} class="flex min-h-14 items-center justify-between gap-3 rounded-xl border border-ink-700 bg-ink-950 px-3 py-2 hover:border-amber-500/50">
+                <span class="min-w-0">
+                  <span class="block truncate text-sm font-medium">{j.title}</span>
+                  <span class="block truncate text-xs text-stone-400">{j.customerName}</span>
+                </span>
+                <span class="text-xs font-semibold text-amber-400">
+                  {j.scheduledAt && new Intl.DateTimeFormat('en-GB', { timeStyle: 'short', timeZone: tz }).format(j.scheduledAt)}
+                </span>
+              </a>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+
+    {missedCalls.length > 0 && (
+      <section class="rounded-2xl border border-ink-700 bg-ink-900 p-5">
+        <h3 class="font-bold">Missed calls</h3>
+        <div class="mt-3 space-y-2">
+          {missedCalls.map((c) => (
+            <a href={`tel:${c.fromNumber}`} class="flex min-h-14 items-center justify-between gap-3 rounded-xl border border-ink-700 bg-ink-950 px-3 py-2 hover:border-amber-500/50">
+              <span>
+                <span class="block text-sm font-medium">{c.customerName ?? c.fromNumber}</span>
+                <span class="block text-xs text-stone-400">{fmtDateTz(c.createdAt, tz)}</span>
+              </span>
+              <span class={`text-xs ${c.textBackSentAt ? 'text-emerald-400' : 'text-stone-500'}`}>
+                {c.textBackSentAt ? '✓ Text-back sent' : 'No text-back'}
+              </span>
+            </a>
+          ))}
+        </div>
+      </section>
+    )}
+
+    <!-- Recent jobs -->
+    <section class="rounded-2xl border border-ink-700 bg-ink-900 p-5">
+      <div class="flex items-baseline justify-between">
+        <h3 class="font-bold">Recent jobs</h3>
+        <a href="/dashboard/jobs" class="text-sm text-amber-400 hover:underline">All jobs →</a>
+      </div>
+      {recent.length === 0 ? (
+        <p class="mt-4 rounded-xl border border-dashed border-ink-600 p-8 text-center text-sm text-stone-500">
+          No jobs yet — tap “New job” to create your first one.
+        </p>
+      ) : (
+        <div class="mt-3 overflow-x-auto">
+          <table class="w-full min-w-125 text-left">
+            <thead>
+              <tr class="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+                <th class="pb-2 pr-4">Job</th>
+                <th class="pb-2 pr-4">Customer</th>
+                <th class="pb-2 pr-4">Stage</th>
+                <th class="pb-2 text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recent.map((j) => (
+                <tr class="cursor-pointer border-t border-ink-700 hover:bg-ink-800/50" onclick={`window.location='/dashboard/jobs/${j.id}'`}>
+                  <td class="py-3.5 pr-4 text-sm font-medium">{j.title}</td>
+                  <td class="py-3.5 pr-4 text-sm text-stone-300">{j.customerName}</td>
+                  <td class="py-3.5 pr-4">
+                    <span class={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${stageStyle[j.status].pill}`}>
+                      <span class={`h-1.5 w-1.5 rounded-full ${stageStyle[j.status].dot}`} />
+                      {STATUS_LABELS[j.status]}
+                    </span>
+                  </td>
+                  <td class="py-3.5 text-right text-sm font-semibold">{fmtMoney(j.totalCents, tenant?.currency)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  </div>
+</AppShell>

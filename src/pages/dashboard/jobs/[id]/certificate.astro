@@ -1,0 +1,103 @@
+---
+import { env } from 'cloudflare:workers';
+import { eq } from 'drizzle-orm';
+import AppShell from '../../../../layouts/AppShell.astro';
+import { createDb, tenantValues, tenantWhere } from '../../../../db';
+import { certificates, CERT_TYPES, jobs, users, type CertType } from '../../../../db/schema';
+import { CERT_DEFS, CERT_LABELS } from '../../../../lib/certs';
+import { newId } from '../../../../lib/ids';
+
+const tenantId = Astro.locals.tenantId!;
+const jobId = Astro.params.id!;
+const db = createDb(env.DB);
+
+const typeParam = Astro.url.searchParams.get('type') ?? '';
+if (!CERT_TYPES.includes(typeParam as CertType)) return Astro.redirect(`/dashboard/jobs/${jobId}`);
+const type = typeParam as CertType;
+const def = CERT_DEFS[type];
+
+const [job] = await db
+  .select({ id: jobs.id, title: jobs.title, customerId: jobs.customerId, assignedUserId: jobs.assignedUserId })
+  .from(jobs)
+  .where(tenantWhere(jobs, tenantId, eq(jobs.id, jobId)))
+  .limit(1);
+if (!job) return new Response('Not found', { status: 404 });
+const isFieldRole = Astro.locals.userRole === 'technician' || Astro.locals.userRole === 'apprentice';
+if (isFieldRole && job.assignedUserId !== Astro.locals.userId) {
+  return new Response('Not found', { status: 404 });
+}
+const [me] = await db
+  .select({ name: users.name })
+  .from(users)
+  .where(eq(users.id, Astro.locals.userId!))
+  .limit(1);
+
+let error = '';
+if (Astro.request.method === 'POST') {
+  try {
+    const form = await Astro.request.formData();
+    const data: Record<string, string> = {};
+    let missing = false;
+    for (const field of def.fields) {
+      const v = String(form.get(field.key) ?? '').trim().slice(0, 4000);
+      if (field.required && !v) missing = true;
+      data[field.key] = v;
+    }
+    const engineerName = String(form.get('engineerName') ?? '').trim().slice(0, 80);
+    if (missing || !engineerName) {
+      error = 'Fill in all required fields.';
+    } else {
+      await db.insert(certificates).values(
+        tenantValues(tenantId, {
+          id: newId(),
+          jobId,
+          customerId: job.customerId,
+          type,
+          certNumber: `${type === 'cp12' ? 'CP12' : type.toUpperCase().replace('_', '')}-${newId().slice(0, 8).toUpperCase()}`,
+          data: JSON.stringify(data),
+          engineerName,
+          registrationNumber: String(form.get('registrationNumber') ?? '').trim().slice(0, 60) || null,
+        }),
+      );
+      return Astro.redirect(`/dashboard/jobs/${jobId}`);
+    }
+  } catch {
+    error = 'Could not save the certificate. Please try again.';
+  }
+}
+---
+
+<AppShell title={CERT_LABELS[type]} active="jobs">
+  <div class="mx-auto max-w-xl space-y-5">
+    <div>
+      <a href={`/dashboard/jobs/${jobId}`} class="text-sm text-stone-400 hover:text-stone-200">← {job.title}</a>
+      <h2 class="mt-1 text-2xl font-bold">{def.title}</h2>
+    </div>
+    {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
+    <form method="POST" class="space-y-4 rounded-2xl border border-ink-700 bg-ink-900 p-5">
+      <label class="block space-y-1">
+        <span class="text-sm text-stone-400">Engineer / operative name *</span>
+        <input name="engineerName" required value={me?.name ?? ''} class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none" />
+      </label>
+      <label class="block space-y-1">
+        <span class="text-sm text-stone-400">{def.regLabel}</span>
+        <input name="registrationNumber" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none" />
+      </label>
+      {def.fields.map((field) => (
+        <label class="block space-y-1">
+          <span class="text-sm text-stone-400">{field.label}{field.required ? ' *' : ''}</span>
+          {field.kind === 'textarea' ? (
+            <textarea name={field.key} rows="3" required={field.required} placeholder={field.placeholder} class="w-full rounded-xl border border-ink-600 bg-ink-950 px-4 py-3 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none"></textarea>
+          ) : field.kind === 'select' ? (
+            <select name={field.key} class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none">
+              {(field.options ?? []).map((o) => <option value={o}>{o}</option>)}
+            </select>
+          ) : (
+            <input name={field.key} type={field.kind === 'date' ? 'date' : 'text'} required={field.required} placeholder={field.placeholder} class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+          )}
+        </label>
+      ))}
+      <button type="submit" class="w-full min-h-12 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">Issue certificate</button>
+    </form>
+  </div>
+</AppShell>

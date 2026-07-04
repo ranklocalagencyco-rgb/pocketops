@@ -1,0 +1,123 @@
+---
+import { env } from 'cloudflare:workers';
+import { desc, eq } from 'drizzle-orm';
+import AppShell from '../../../layouts/AppShell.astro';
+import { createDb, tenantWhere } from '../../../db';
+import { tenantDocuments, tenants } from '../../../db/schema';
+import { fmtDateTz } from '../../../lib/jobs';
+import { canSeeFinancials } from '../../../lib/masking';
+
+if (!canSeeFinancials(Astro.locals.userRole!)) return Astro.redirect('/dashboard/settings');
+const tenantId = Astro.locals.tenantId!;
+const db = createDb(env.DB);
+
+let notice = '';
+const errorParam = Astro.url.searchParams.get('error');
+let error =
+  errorParam === 'size'
+    ? 'That file is over the 10MB limit.'
+    : errorParam === 'type'
+      ? 'PDFs, images, and Word documents only.'
+      : '';
+
+if (Astro.request.method === 'POST') {
+  try {
+    const form = await Astro.request.formData();
+    const intent = String(form.get('intent') ?? '');
+    const docId = String(form.get('docId') ?? '');
+    if (intent === 'delete') {
+      const [doc] = await db
+        .select()
+        .from(tenantDocuments)
+        .where(tenantWhere(tenantDocuments, tenantId, eq(tenantDocuments.id, docId)))
+        .limit(1);
+      if (doc) {
+        await env.FILES.delete(doc.r2Key);
+        await db
+          .delete(tenantDocuments)
+          .where(tenantWhere(tenantDocuments, tenantId, eq(tenantDocuments.id, docId)));
+        notice = 'Document deleted.';
+      }
+    } else if (intent === 'toggle') {
+      const [doc] = await db
+        .select({ showOnPortal: tenantDocuments.showOnPortal })
+        .from(tenantDocuments)
+        .where(tenantWhere(tenantDocuments, tenantId, eq(tenantDocuments.id, docId)))
+        .limit(1);
+      if (doc) {
+        await db
+          .update(tenantDocuments)
+          .set({ showOnPortal: !doc.showOnPortal })
+          .where(tenantWhere(tenantDocuments, tenantId, eq(tenantDocuments.id, docId)));
+      }
+    }
+  } catch {
+    error = 'That change failed. Please try again.';
+  }
+}
+
+const [tenant] = await db
+  .select({ timezone: tenants.timezone })
+  .from(tenants)
+  .where(eq(tenants.id, tenantId))
+  .limit(1);
+const docs = await db
+  .select()
+  .from(tenantDocuments)
+  .where(tenantWhere(tenantDocuments, tenantId))
+  .orderBy(desc(tenantDocuments.createdAt));
+const kb = (bytes: number) => (bytes > 1024 * 1024 ? `${(bytes / 1048576).toFixed(1)}MB` : `${Math.max(1, Math.round(bytes / 1024))}KB`);
+---
+
+<AppShell title="Documents" active="settings">
+  <div class="mx-auto max-w-xl space-y-5">
+    <div>
+      <a href="/dashboard/settings" class="text-sm text-stone-400 hover:text-stone-200">← Settings</a>
+      <h2 class="mt-1 text-2xl font-bold">Documents</h2>
+      <p class="text-sm text-stone-400">Insurance, Gas Safe card, qualifications, T&Cs — upload once, share with any client in one tap.</p>
+    </div>
+    {notice && <p class="rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300">{notice}</p>}
+    {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
+
+    <form method="POST" action="/api/app/docs" enctype="multipart/form-data" class="space-y-3 rounded-2xl border border-ink-700 bg-ink-900 p-4">
+      <input name="name" placeholder="Document name (e.g. Public liability insurance 2026)" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+      <input type="file" name="file" accept="application/pdf,image/*,.doc,.docx" required class="min-h-12 w-full rounded-xl border border-ink-600 bg-ink-950 px-3 py-2.5 text-sm text-stone-400 file:mr-3 file:rounded-lg file:border-0 file:bg-ink-700 file:px-3 file:py-1.5 file:text-stone-200" />
+      <label class="flex min-h-12 items-center gap-3 text-sm text-stone-300">
+        <input type="checkbox" name="showOnPortal" value="1" checked class="h-5 w-5 rounded border-ink-600 bg-ink-950 accent-orange-600" />
+        Show under “Our credentials” on quotes and the client hub
+      </label>
+      <button type="submit" class="w-full min-h-12 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">Upload document</button>
+    </form>
+
+    {docs.length === 0 && (
+      <p class="rounded-2xl border border-dashed border-ink-600 p-8 text-center text-sm text-stone-500">
+        Nothing uploaded yet. Insurance certificates and qualifications are the ones clients ask for most.
+      </p>
+    )}
+    <div class="space-y-2">
+      {docs.map((d) => (
+        <div class="space-y-2 rounded-2xl border border-ink-700 bg-ink-900 px-4 py-3">
+          <div class="flex items-center justify-between gap-3">
+            <a href={`/api/app/docs/${d.id}`} target="_blank" class="min-w-0 flex-1">
+              <p class="truncate font-medium hover:text-amber-400">📄 {d.name}</p>
+              <p class="text-xs text-stone-500">{kb(d.sizeBytes)} · {fmtDateTz(d.createdAt, tenant?.timezone)} · {d.showOnPortal ? 'shown to customers' : 'private'}</p>
+            </a>
+            <form method="POST">
+              <input type="hidden" name="intent" value="toggle" />
+              <input type="hidden" name="docId" value={d.id} />
+              <button type="submit" class={`min-h-12 rounded-lg px-3 text-xs font-semibold ${d.showOnPortal ? 'text-emerald-400' : 'text-stone-500'}`} title="Toggle customer visibility">
+                {d.showOnPortal ? '👁 Visible' : '🚫 Hidden'}
+              </button>
+            </form>
+            <form method="POST">
+              <input type="hidden" name="intent" value="delete" />
+              <input type="hidden" name="docId" value={d.id} />
+              <button type="submit" class="min-h-12 min-w-10 rounded-lg text-stone-500 hover:text-red-400" aria-label={`Delete ${d.name}`}>✕</button>
+            </form>
+          </div>
+          <input readonly value={`${Astro.url.origin}/docs/${d.shareToken}`} onclick="this.select()" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 font-mono text-xs text-amber-300" />
+        </div>
+      ))}
+    </div>
+  </div>
+</AppShell>

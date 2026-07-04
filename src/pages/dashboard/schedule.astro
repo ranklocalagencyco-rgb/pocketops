@@ -1,0 +1,128 @@
+---
+import { env } from 'cloudflare:workers';
+import { asc, eq, isNotNull } from 'drizzle-orm';
+import AppShell from '../../layouts/AppShell.astro';
+import { createDb, tenantWhere } from '../../db';
+import { customers, jobs, tenants } from '../../db/schema';
+import { STATUS_LABELS } from '../../lib/jobs';
+
+const tenantId = Astro.locals.tenantId!;
+const role = Astro.locals.userRole!;
+const isFieldRole = role === 'technician' || role === 'apprentice';
+const db = createDb(env.DB);
+
+const [tenant] = await db
+  .select({ timezone: tenants.timezone })
+  .from(tenants)
+  .where(eq(tenants.id, tenantId))
+  .limit(1);
+const tz = tenant?.timezone ?? 'Europe/London';
+
+const weekOffset = Number(Astro.url.searchParams.get('week') ?? 0) || 0;
+const now = new Date();
+const DAY_MS = 86_400_000;
+
+// All week math in the TENANT's timezone via formatted keys — never the
+// server's local zone (Workers run UTC; dev machines run anything).
+const dayKey = new Intl.DateTimeFormat('en-CA', {
+  timeZone: tz,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+}); // YYYY-MM-DD
+const timeFmt = new Intl.DateTimeFormat('en-GB', { timeStyle: 'short', timeZone: tz });
+
+// Anchor: noon-UTC on today's tenant-tz calendar date (DST/offset safe)
+const [ty, tm, td] = dayKey.format(now).split('-').map(Number);
+const anchor = new Date(Date.UTC(ty!, tm! - 1, td!, 12));
+const weekdayIndex: Record<string, number> = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+const wd = new Intl.DateTimeFormat('en-GB', { timeZone: tz, weekday: 'short' }).format(anchor);
+const monday = new Date(anchor.getTime() - (weekdayIndex[wd] ?? 0) * DAY_MS + weekOffset * 7 * DAY_MS);
+const days = Array.from({ length: 7 }, (_, i) => new Date(monday.getTime() + i * DAY_MS));
+const weekKeys = new Set(days.map((d) => dayKey.format(d)));
+
+const scheduled = await db
+  .select({
+    id: jobs.id,
+    title: jobs.title,
+    status: jobs.status,
+    scheduledAt: jobs.scheduledAt,
+    customerName: customers.name,
+    addressLine1: customers.addressLine1,
+    city: customers.city,
+    postalCode: customers.postalCode,
+  })
+  .from(jobs)
+  .innerJoin(customers, eq(jobs.customerId, customers.id))
+  .where(
+    tenantWhere(
+      jobs,
+      tenantId,
+      isNotNull(jobs.scheduledAt),
+      isFieldRole ? eq(jobs.assignedUserId, Astro.locals.userId!) : undefined,
+    ),
+  )
+  .orderBy(asc(jobs.scheduledAt));
+
+const inWeek = scheduled.filter((j) => weekKeys.has(dayKey.format(j.scheduledAt!)));
+const byDay = days.map((d) => ({
+  date: d,
+  label: new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: tz }).format(d),
+  isToday: dayKey.format(d) === dayKey.format(now),
+  jobs: inWeek.filter((j) => dayKey.format(j.scheduledAt!) === dayKey.format(d)),
+}));
+const weekLabel = `${new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: tz }).format(monday)} – ${new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: tz }).format(days[6]!)}`;
+
+// Route planning: multi-stop Google Maps directions for today's jobs
+const todayStops = byDay
+  .find((d) => d.isToday)
+  ?.jobs.map((j) => [j.addressLine1, j.city, j.postalCode].filter(Boolean).join(', '))
+  .filter(Boolean) ?? [];
+const routeUrl =
+  todayStops.length > 0
+    ? `https://www.google.com/maps/dir/${todayStops.map((s) => encodeURIComponent(s)).join('/')}`
+    : null;
+---
+
+<AppShell title="Schedule" active="schedule">
+  <div class="space-y-4">
+    <div class="flex items-center justify-between gap-2">
+      <h1 class="text-xl font-bold">Schedule</h1>
+      <div class="flex items-center gap-1">
+        <a href={`/dashboard/schedule?week=${weekOffset - 1}`} class="flex min-h-12 min-w-12 items-center justify-center rounded-xl border border-ink-600 text-stone-300 hover:border-amber-500">←</a>
+        <a href="/dashboard/schedule" class={`flex min-h-12 items-center rounded-xl border px-3 text-sm ${weekOffset === 0 ? 'border-amber-500 text-amber-400' : 'border-ink-600 text-stone-300'}`}>{weekLabel}</a>
+        <a href={`/dashboard/schedule?week=${weekOffset + 1}`} class="flex min-h-12 min-w-12 items-center justify-center rounded-xl border border-ink-600 text-stone-300 hover:border-amber-500">→</a>
+      </div>
+    </div>
+
+    {routeUrl && (
+      <a href={routeUrl} target="_blank" rel="noopener" class="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-amber-500 font-semibold text-amber-400 hover:bg-amber-950">
+        🧭 Route today's {todayStops.length} stop{todayStops.length === 1 ? '' : 's'}
+      </a>
+    )}
+
+    <div class="grid gap-3 lg:grid-cols-7 lg:gap-2">
+      {byDay.map((day) => (
+        <section class={`rounded-2xl border p-3 ${day.isToday ? 'border-amber-500/60 bg-ink-900' : 'border-ink-700 bg-ink-900'} ${day.jobs.length === 0 ? 'max-lg:hidden lg:block' : ''}`}>
+          <p class={`text-xs font-semibold uppercase tracking-wider ${day.isToday ? 'text-amber-400' : 'text-stone-500'}`}>{day.label}{day.isToday ? ' · today' : ''}</p>
+          <div class="mt-2 space-y-2">
+            {day.jobs.length === 0 && <p class="text-xs text-stone-600">—</p>}
+            {day.jobs.map((j) => (
+              <a href={`/dashboard/jobs/${j.id}`} class="block rounded-xl border border-ink-600 bg-ink-950 p-2.5 hover:border-amber-500/60">
+                <p class="text-xs font-semibold text-amber-400">{timeFmt.format(j.scheduledAt!)}</p>
+                <p class="mt-0.5 truncate text-sm font-medium">{j.title}</p>
+                <p class="truncate text-xs text-stone-400">{j.customerName} · {STATUS_LABELS[j.status]}</p>
+              </a>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+
+    {inWeek.length === 0 && (
+      <p class="rounded-2xl border border-dashed border-ink-600 p-8 text-center text-sm text-stone-500">
+        Nothing scheduled this week. Set a date on any job to see it here.
+      </p>
+    )}
+  </div>
+</AppShell>

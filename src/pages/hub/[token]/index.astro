@@ -1,0 +1,110 @@
+---
+/**
+ * Client hub — a customer's permanent magic link: every job, invoice, and
+ * certificate in one place. No password, no account.
+ */
+import '../../../styles/global.css';
+import { env } from 'cloudflare:workers';
+import { desc, eq } from 'drizzle-orm';
+import { createDb, tenantWhere } from '../../../db';
+import { certificates, customers, jobs, tenantDocuments, tenants } from '../../../db/schema';
+import { CERT_LABELS } from '../../../lib/certs';
+import { fmtDateTz, fmtMoney, STATUS_LABELS } from '../../../lib/jobs';
+
+const token = Astro.params.token ?? '';
+if (token.length < 21) return new Response('Not found', { status: 404 });
+
+const db = createDb(env.DB);
+const [customer] = await db.select().from(customers).where(eq(customers.portalToken, token)).limit(1);
+if (!customer) return new Response('Not found', { status: 404 });
+
+const [tenant] = await db.select().from(tenants).where(eq(tenants.id, customer.tenantId)).limit(1);
+const jobRows = await db
+  .select()
+  .from(jobs)
+  .where(tenantWhere(jobs, customer.tenantId, eq(jobs.customerId, customer.id)))
+  .orderBy(desc(jobs.updatedAt));
+const visibleJobs = jobRows.filter((j) => j.status !== 'lead' && j.status !== 'cancelled');
+const certs = await db
+  .select()
+  .from(certificates)
+  .where(tenantWhere(certificates, customer.tenantId, eq(certificates.customerId, customer.id)))
+  .orderBy(desc(certificates.issuedAt));
+const credentials = await db
+  .select({ name: tenantDocuments.name, shareToken: tenantDocuments.shareToken })
+  .from(tenantDocuments)
+  .where(tenantWhere(tenantDocuments, customer.tenantId, eq(tenantDocuments.showOnPortal, true)));
+const currency = tenant?.currency;
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Your account · {tenant?.name}</title>
+  </head>
+  <body class="min-h-screen bg-zinc-100 text-zinc-900">
+    <main class="mx-auto max-w-lg space-y-5 p-4 pb-16">
+      <header class="pt-6 text-center">
+        <p class="text-sm uppercase tracking-widest text-zinc-500">Your account with</p>
+        <h1 class="text-2xl font-bold">{tenant?.name}</h1>
+        <p class="text-zinc-500">{customer.name}</p>
+        {tenant?.phone && <a href={`tel:${tenant.phone}`} class="mt-2 inline-flex min-h-12 items-center rounded-xl bg-zinc-900 px-5 font-semibold text-white">📞 Call us</a>}
+      </header>
+
+      <section class="rounded-2xl bg-white p-5 shadow-sm">
+        <p class="font-semibold">Jobs & invoices</p>
+        {visibleJobs.length === 0 && <p class="mt-2 text-sm text-zinc-500">Nothing here yet.</p>}
+        <div class="mt-2 divide-y divide-zinc-100">
+          {visibleJobs.map((j) => (
+            <a href={`/approve/${j.clientToken}`} class="flex min-h-14 items-center justify-between gap-3 py-3">
+              <span class="min-w-0">
+                <span class="block truncate text-sm font-medium">{j.title}</span>
+                <span class="block text-xs text-zinc-500">{STATUS_LABELS[j.status]}{j.scheduledAt ? ` · ${fmtDateTz(j.scheduledAt, tenant?.timezone)}` : ''}</span>
+              </span>
+              <span class="flex items-center gap-2">
+                <span class="text-sm font-semibold">{fmtMoney(j.totalCents, currency)}</span>
+                {j.status === 'invoiced' && <span class="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-700">Pay →</span>}
+                {j.status === 'quoted' && <span class="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700">Review →</span>}
+              </span>
+            </a>
+          ))}
+        </div>
+      </section>
+
+      {certs.length > 0 && (
+        <section class="rounded-2xl bg-white p-5 shadow-sm">
+          <p class="font-semibold">Certificates & documents</p>
+          <div class="mt-2 divide-y divide-zinc-100">
+            {certs.map((c) => (
+              <a href={`/hub/${token}/cert/${c.id}`} target="_blank" class="flex min-h-14 items-center justify-between gap-3 py-3">
+                <span>
+                  <span class="block text-sm font-medium">{CERT_LABELS[c.type]}</span>
+                  <span class="block text-xs text-zinc-500">{c.certNumber} · {fmtDateTz(c.issuedAt, tenant?.timezone)}</span>
+                </span>
+                <span class="text-sm font-semibold text-zinc-500">PDF ⬇</span>
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {credentials.length > 0 && (
+        <section class="rounded-2xl bg-white p-5 shadow-sm">
+          <p class="font-semibold">Our credentials</p>
+          <div class="mt-2 divide-y divide-zinc-100">
+            {credentials.map((d) => (
+              <a href={`/docs/${d.shareToken}`} target="_blank" class="flex min-h-12 items-center justify-between gap-3 py-2">
+                <span class="text-sm font-medium">📄 {d.name}</span>
+                <span class="text-xs font-semibold text-zinc-400">View →</span>
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <p class="text-center text-xs text-zinc-400">Powered by Pocket Ops</p>
+    </main>
+  </body>
+</html>

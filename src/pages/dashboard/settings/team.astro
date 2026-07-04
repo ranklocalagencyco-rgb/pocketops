@@ -1,0 +1,117 @@
+---
+import { env } from 'cloudflare:workers';
+import { asc, eq } from 'drizzle-orm';
+import AppShell from '../../../layouts/AppShell.astro';
+import { createDb, tenantValues, tenantWhere } from '../../../db';
+import { users, USER_ROLES, type UserRole } from '../../../db/schema';
+import { newId } from '../../../lib/ids';
+import { fmtMoney, parseMoney } from '../../../lib/jobs';
+import { canSeeFinancials } from '../../../lib/masking';
+import { hashPassword } from '../../../lib/password';
+
+if (!canSeeFinancials(Astro.locals.userRole!)) return Astro.redirect('/dashboard/settings');
+const tenantId = Astro.locals.tenantId!;
+const db = createDb(env.DB);
+
+let notice = '';
+let error = '';
+if (Astro.request.method === 'POST') {
+  try {
+    const form = await Astro.request.formData();
+    const intent = String(form.get('intent') ?? '');
+    if (intent === 'add-user') {
+      const name = String(form.get('name') ?? '').trim();
+      const email = String(form.get('email') ?? '').trim().toLowerCase();
+      const password = String(form.get('password') ?? '');
+      const newRole = String(form.get('role') ?? 'technician') as UserRole;
+      if (!name || !email.includes('@') || password.length < 8 || !USER_ROLES.includes(newRole)) {
+        error = 'Team members need a name, email, role, and 8+ char password.';
+      } else if (newRole === 'owner') {
+        error = 'Only one owner per workspace.';
+      } else {
+        const clash = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
+        if (clash.length > 0) {
+          error = 'That email is already in use.';
+        } else {
+          await db.insert(users).values(
+            tenantValues(tenantId, {
+              id: newId(),
+              email,
+              name,
+              role: newRole,
+              passwordHash: await hashPassword(password),
+              hourlyCostCents: parseMoney(form.get('hourlyCost')),
+            }),
+          );
+          notice = `${name} added as ${newRole}.`;
+        }
+      }
+    } else if (intent === 'deactivate-user') {
+      const userId = String(form.get('userId') ?? '');
+      if (userId === Astro.locals.userId) {
+        error = 'You cannot deactivate yourself.';
+      } else {
+        await db
+          .update(users)
+          .set({ isActive: false })
+          .where(tenantWhere(users, tenantId, eq(users.id, userId)));
+        notice = 'User deactivated.';
+      }
+    }
+  } catch {
+    error = 'That change failed. Please try again.';
+  }
+}
+
+const team = await db.select().from(users).where(tenantWhere(users, tenantId)).orderBy(asc(users.name));
+---
+
+<AppShell title="Team" active="settings">
+  <div class="mx-auto max-w-xl space-y-5">
+    <div>
+      <a href="/dashboard/settings" class="text-sm text-stone-400 hover:text-stone-200">← Settings</a>
+      <h2 class="mt-1 text-2xl font-bold">Team</h2>
+      <p class="text-sm text-stone-400">Techs and apprentices never see costs or margins.</p>
+    </div>
+    {notice && <p class="rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300">{notice}</p>}
+    {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
+
+    <div class="space-y-2">
+      {team.map((u) => (
+        <div class="flex items-center justify-between gap-3 rounded-2xl border border-ink-700 bg-ink-900 px-4 py-3">
+          <div>
+            <p class={`font-medium ${u.isActive ? '' : 'line-through text-stone-500'}`}>{u.name}</p>
+            <p class="text-sm text-stone-400">
+              {u.email} · {u.role}
+              {u.hourlyCostCents != null && ` · ${fmtMoney(u.hourlyCostCents)}/hr cost`}
+            </p>
+          </div>
+          {u.isActive && u.id !== Astro.locals.userId && (
+            <form method="POST">
+              <input type="hidden" name="intent" value="deactivate-user" />
+              <input type="hidden" name="userId" value={u.id} />
+              <button type="submit" class="min-h-12 rounded-lg px-3 text-sm text-stone-500 hover:text-red-400">Deactivate</button>
+            </form>
+          )}
+        </div>
+      ))}
+    </div>
+
+    <details class="rounded-2xl border border-ink-700 bg-ink-900">
+      <summary class="flex min-h-12 cursor-pointer items-center px-4 text-sm font-semibold text-amber-400">+ Add team member</summary>
+      <form method="POST" class="space-y-3 border-t border-ink-700 p-4">
+        <input type="hidden" name="intent" value="add-user" />
+        <input name="name" required placeholder="Name" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+        <input name="email" type="email" required placeholder="Email" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+        <input name="password" type="password" required minlength="8" placeholder="Temp password (8+)" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+        <input name="hourlyCost" inputmode="decimal" placeholder="Hourly cost (£/hr, private — optional)" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+        <select name="role" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none">
+          <option value="technician">Technician (costs hidden)</option>
+          <option value="apprentice">Apprentice (costs hidden)</option>
+          <option value="admin">Admin (full financials)</option>
+        </select>
+        <button type="submit" class="w-full min-h-12 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">Add member</button>
+      </form>
+    </details>
+  </div>
+</AppShell>

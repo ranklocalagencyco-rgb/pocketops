@@ -1,0 +1,101 @@
+---
+import { env } from 'cloudflare:workers';
+import AppShell from '../../../layouts/AppShell.astro';
+import { createDb, tenantWhere } from '../../../db';
+import { emailAccounts, tenants } from '../../../db/schema';
+import { eq } from 'drizzle-orm';
+import { emailProviderConfigured, isEmailProvider } from '../../../lib/email';
+import { fmtDateTz } from '../../../lib/jobs';
+import { canSeeFinancials } from '../../../lib/masking';
+
+if (!canSeeFinancials(Astro.locals.userRole!)) return Astro.redirect('/dashboard/settings');
+const tenantId = Astro.locals.tenantId!;
+const db = createDb(env.DB);
+
+const [tenant] = await db
+  .select({ timezone: tenants.timezone })
+  .from(tenants)
+  .where(eq(tenants.id, tenantId))
+  .limit(1);
+const accounts = await db
+  .select()
+  .from(emailAccounts)
+  .where(tenantWhere(emailAccounts, tenantId));
+
+const providers = [
+  { id: 'gmail', label: 'Gmail', hint: 'Google Workspace or personal Gmail' },
+  { id: 'outlook', label: 'Outlook', hint: 'Microsoft 365 or Outlook.com' },
+].map((p) => ({
+  ...p,
+  configured: isEmailProvider(p.id) && emailProviderConfigured(p.id, env),
+  account: accounts.find((a) => a.provider === p.id),
+}));
+const connectedFlash = Astro.url.searchParams.get('connected');
+const errorFlash = Astro.url.searchParams.get('error');
+---
+
+<AppShell title="Email" active="settings">
+  <div class="mx-auto max-w-xl space-y-5">
+    <div>
+      <a href="/dashboard/settings" class="text-sm text-stone-400 hover:text-stone-200">← Settings</a>
+      <h2 class="mt-1 text-2xl font-bold">Email</h2>
+      <p class="text-sm text-stone-400">Connect your mailbox — emails from customers join the same inbox threads as texts, and replies send from your own address.</p>
+    </div>
+    {connectedFlash && <p class="rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300">{connectedFlash} connected.</p>}
+    {errorFlash && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">Connection failed — try again.</p>}
+
+    <div class="space-y-2">
+      {providers.map((p) => (
+        <div class="flex items-center justify-between gap-3 rounded-2xl border border-ink-700 bg-ink-900 px-4 py-3">
+          <div>
+            <p class="font-medium">{p.label}</p>
+            <p class="text-sm text-stone-400">
+              {p.account
+                ? `Connected as ${p.account.emailAddress}${p.account.status === 'error' ? ' — needs reconnecting' : ''}${p.account.lastSyncedAt ? ` · synced ${fmtDateTz(p.account.lastSyncedAt, tenant?.timezone)}` : ''}`
+                : p.configured
+                  ? p.hint
+                  : `Add ${p.id === 'gmail' ? 'GOOGLE' : 'MS'}_CLIENT_ID + _CLIENT_SECRET to your Cloudflare secrets first`}
+            </p>
+          </div>
+          {p.configured && (!p.account || p.account.status === 'error') && (
+            <a href={`/api/email/${p.id}/connect`} class="flex min-h-12 items-center rounded-xl border border-amber-500 px-4 text-sm font-semibold text-amber-400 hover:bg-amber-950">
+              {p.account ? 'Reconnect' : 'Connect'}
+            </a>
+          )}
+          {p.account?.status === 'active' && <span class="text-emerald-400">●</span>}
+        </div>
+      ))}
+    </div>
+
+    {accounts.length > 0 && (
+      <div class="rounded-2xl border border-ink-700 bg-ink-900 p-5">
+        <p class="font-semibold">Sync</p>
+        <p class="mt-1 text-sm text-stone-400">New mail from known customers is pulled in by the daily automations run, or on demand:</p>
+        <button id="sync-now" class="mt-3 w-full min-h-12 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">Sync now</button>
+        <p id="sync-result" class="mt-2 hidden rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300"></p>
+      </div>
+    )}
+
+    <div class="rounded-2xl border border-ink-700 bg-ink-900 p-5 text-sm text-stone-400">
+      <p class="font-semibold text-stone-200">How it works</p>
+      <p class="mt-1">Only emails from senders matching a customer's email address are pulled in — no newsletters or spam. Replies from the inbox send through your connected mailbox, so customers see your normal address and everything stays in one thread alongside texts.</p>
+    </div>
+  </div>
+</AppShell>
+
+<script>
+  document.getElementById('sync-now')?.addEventListener('click', async () => {
+    const out = document.getElementById('sync-result')!;
+    out.classList.remove('hidden');
+    out.textContent = 'Syncing…';
+    try {
+      const res = await fetch('/api/email/sync', { method: 'POST' });
+      const json = (await res.json()) as { ingested: number; errors: string[] };
+      out.textContent = json.errors.length
+        ? `Sync hit a problem: ${json.errors[0]}`
+        : `Done — ${json.ingested} new email${json.ingested === 1 ? '' : 's'} pulled into the inbox.`;
+    } catch {
+      out.textContent = 'Sync failed — try again.';
+    }
+  });
+</script>

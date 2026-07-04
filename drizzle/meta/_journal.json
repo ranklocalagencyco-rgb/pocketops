@@ -1,0 +1,62 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1783161997344,
+      "tag": "0000_init_multitenant_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1783162778462,
+      "tag": "0001_tenant_comms_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1783167094499,
+      "tag": "0002_settings_pricebook_tax",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1783167711304,
+      "tag": "0003_uk_defaults_vat",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1783168245781,
+      "tag": "0004_allinone_features",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1783181667619,
+      "tag": "0005_email_inbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1783182595487,
+      "tag": "0006_certs_cis_hub_gps",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1783183977061,
+      "tag": "0007_tenant_documents",
+      "breakpoints": true
+    }
+  ]
+}

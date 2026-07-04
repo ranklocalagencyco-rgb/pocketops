@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+/* Pocket Ops "Forge" theme — warm charcoal shell, molten-copper accents.
+   Grounded in the trades: gunmetal, soot, copper pipe, sparks. */
+@theme {
+  --color-ink-950: #151210;
+  --color-ink-900: #1e1a17;
+  --color-ink-800: #2a241f;
+  --color-ink-700: #3a322b;
+  --color-ink-600: #4c4238;
+}
+
+/* Fat-finger baseline: every interactive element on mobile meets 48px.
+   The component layer builds on this floor. */
+@layer base {
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea,
+  a.btn {
+    min-height: 48px;
+  }
+}

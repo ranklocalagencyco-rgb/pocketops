@@ -1,0 +1,15 @@
+{
+  "name": "Pocket Ops",
+  "short_name": "PocketOps",
+  "description": "CRM and mobile invoicing for UK trades and field service pros",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#151210",
+  "theme_color": "#151210",
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

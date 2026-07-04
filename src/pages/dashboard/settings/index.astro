@@ -1,0 +1,84 @@
+---
+import { env } from 'cloudflare:workers';
+import { eq, isNotNull } from 'drizzle-orm';
+import AppShell from '../../../layouts/AppShell.astro';
+import { createDb, tenantWhere } from '../../../db';
+import { accountingConnections, emailAccounts, jobs, priceBookItems, tenantDocuments, tenants, users } from '../../../db/schema';
+import { canSeeFinancials } from '../../../lib/masking';
+import { twilioConfigured } from '../../../lib/twilio';
+
+const tenantId = Astro.locals.tenantId!;
+const isAdmin = canSeeFinancials(Astro.locals.userRole!);
+const db = createDb(env.DB);
+
+const [tenant] = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+const teamCount = isAdmin
+  ? (await db.select({ id: users.id }).from(users).where(tenantWhere(users, tenantId, eq(users.isActive, true)))).length
+  : 0;
+const bookCount = isAdmin
+  ? (await db.select({ id: priceBookItems.id }).from(priceBookItems).where(tenantWhere(priceBookItems, tenantId, eq(priceBookItems.isActive, true)))).length
+  : 0;
+const connCount = isAdmin
+  ? (await db.select({ id: accountingConnections.id }).from(accountingConnections).where(tenantWhere(accountingConnections, tenantId, eq(accountingConnections.status, 'active')))).length
+  : 0;
+
+const docsCount = isAdmin
+  ? (await db.select({ id: tenantDocuments.id }).from(tenantDocuments).where(tenantWhere(tenantDocuments, tenantId))).length
+  : 0;
+const emailCount = isAdmin
+  ? (await db.select({ id: emailAccounts.id }).from(emailAccounts).where(tenantWhere(emailAccounts, tenantId, eq(emailAccounts.status, 'active')))).length
+  : 0;
+const automationsCount = isAdmin
+  ? (await db.select({ id: jobs.id }).from(jobs).where(tenantWhere(jobs, tenantId, isNotNull(jobs.recurrenceMonths)))).length
+  : 0;
+const stripeCount = (env.STRIPE_SECRET_KEY ? 1 : 0) + (env.STRIPE_WEBHOOK_SECRET ? 1 : 0);
+const messagingCount =
+  (twilioConfigured(env) ? 1 : 0) + (tenant?.twilioNumber ? 1 : 0) + (tenant?.missedCallMessage ? 1 : 0);
+const reviewsCount = (tenant?.reviewLinkUrl ? 1 : 0) + (tenant?.reviewMessage ? 1 : 0);
+const businessCount = [tenant?.name, tenant?.phone, tenant?.email].filter(Boolean).length;
+const regionalCount =
+  (tenant?.timezone ? 1 : 0) +
+  (tenant?.currency ? 1 : 0) +
+  ((tenant?.taxRateBps ?? 0) > 0 ? 1 : 0) +
+  (tenant?.vatNumber ? 1 : 0);
+
+const cards = [
+  { href: '/dashboard/settings/business', title: 'Business', desc: 'Company name and contact details on invoices.', count: businessCount },
+  { href: '/dashboard/settings/regional', title: 'Regional & VAT', desc: 'Timezone, currency, VAT rate and registration number.', count: regionalCount },
+  { href: '/dashboard/settings/team', title: 'Team', desc: 'Techs, admins, roles, and private hourly costs.', count: teamCount },
+  { href: '/dashboard/settings/pricebook', title: 'Price Book', desc: 'Reusable labor, materials, and fees for fast quoting.', count: bookCount },
+  { href: '/dashboard/settings/documents', title: 'Documents', desc: 'Insurance, qualifications, and T&Cs — share in one tap.', count: docsCount },
+  { href: '/dashboard/settings/messaging', title: 'Messaging', desc: 'Missed-call text-back number and message.', count: messagingCount },
+  { href: '/dashboard/settings/email', title: 'Email', desc: 'Gmail or Outlook — customer emails join inbox threads.', count: emailCount },
+  { href: '/dashboard/settings/reviews', title: 'Reviews', desc: 'Review link and the SMS sent after payment.', count: reviewsCount },
+  { href: '/dashboard/settings/payments', title: 'Payments', desc: 'Stripe Checkout, Apple Pay, and Google Pay status.', count: stripeCount },
+  { href: '/dashboard/settings/accounting', title: 'Accounting Sync', desc: 'QuickBooks or Xero connections and sync history.', count: connCount },
+  { href: '/dashboard/settings/automations', title: 'Automations', desc: 'Invoice chasing and recurring service reminders.', count: automationsCount },
+];
+---
+
+<AppShell title="Settings" active="settings">
+  {!isAdmin ? (
+    <p class="rounded-2xl border border-ink-700 bg-ink-900 p-6 text-stone-400">
+      Settings are managed by your company owner or admin.
+    </p>
+  ) : (
+    <div class="space-y-6">
+      <div>
+        <p class="text-[11px] font-semibold uppercase tracking-widest text-stone-500">Tenant configuration</p>
+        <h2 class="mt-1 text-3xl font-bold">Settings</h2>
+      </div>
+      <div class="grid gap-3 md:grid-cols-2">
+        {cards.map((c) => (
+          <a href={c.href} class="flex min-h-16 items-center justify-between gap-4 rounded-2xl border border-ink-700 bg-ink-900 px-5 py-4 transition-colors hover:border-amber-500/60">
+            <span>
+              <span class="block font-bold">{c.title}</span>
+              <span class="mt-0.5 block text-sm text-stone-400">{c.desc}</span>
+            </span>
+            <span class={`text-2xl font-bold ${c.count > 0 ? 'text-stone-100' : 'text-stone-600'}`}>{c.count}</span>
+          </a>
+        ))}
+      </div>
+    </div>
+  )}
+</AppShell>
