@@ -3,7 +3,7 @@ import { env } from 'cloudflare:workers';
 import { eq, isNotNull } from 'drizzle-orm';
 import AppShell from '../../../layouts/AppShell.astro';
 import { createDb, tenantWhere } from '../../../db';
-import { accountingConnections, emailAccounts, jobs, priceBookItems, tenantDocuments, tenants, users } from '../../../db/schema';
+import { accountingConnections, customers, emailAccounts, expenses, jobs, priceBookItems, tenantDocuments, tenants, timeEntries, users } from '../../../db/schema';
 import { canSeeFinancials } from '../../../lib/masking';
 import { twilioConfigured } from '../../../lib/twilio';
 
@@ -37,6 +37,12 @@ const messagingCount =
   (twilioConfigured(env) ? 1 : 0) + (tenant?.twilioNumber ? 1 : 0) + (tenant?.missedCallMessage ? 1 : 0);
 const reviewsCount = (tenant?.reviewLinkUrl ? 1 : 0) + (tenant?.reviewMessage ? 1 : 0);
 const businessCount = [tenant?.name, tenant?.phone, tenant?.email].filter(Boolean).length;
+// Import & export badge: how many datasets have anything in them (0–5)
+const hasRows = async (table: typeof customers | typeof jobs | typeof expenses | typeof timeEntries | typeof tenantDocuments) =>
+  (await db.select({ id: table.id }).from(table).where(tenantWhere(table, tenantId)).limit(1)).length;
+const dataCount = isAdmin
+  ? (await Promise.all([customers, jobs, expenses, timeEntries, tenantDocuments].map(hasRows))).reduce((a, b) => a + b, 0)
+  : 0;
 const regionalCount =
   (tenant?.timezone ? 1 : 0) +
   (tenant?.currency ? 1 : 0) +
@@ -55,6 +61,7 @@ const cards = [
   { href: '/dashboard/settings/payments', title: 'Payments', desc: 'Connect Stripe — invoices paid straight to your bank.', count: stripeCount },
   { href: '/dashboard/settings/accounting', title: 'Accounting Sync', desc: 'QuickBooks connection and sync history.', count: connCount },
   { href: '/dashboard/settings/automations', title: 'Automations', desc: 'Invoice chasing and recurring service reminders.', count: automationsCount },
+  { href: '/dashboard/settings/import-export', title: 'Import & export', desc: 'Bring in customers and history; export CSVs and full backups.', count: dataCount },
 ];
 ---
 

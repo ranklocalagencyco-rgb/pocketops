@@ -1,0 +1,150 @@
+---
+import { env } from 'cloudflare:workers';
+import AppShell from '../../../layouts/AppShell.astro';
+import { createDb } from '../../../db';
+import { canSeeFinancials } from '../../../lib/masking';
+import { parseCsv } from '../../../lib/csv';
+import {
+  importCustomers,
+  importJobs,
+  ImportError,
+  MAX_IMPORT_ROWS,
+  type ImportSummary,
+} from '../../../lib/import';
+
+if (!canSeeFinancials(Astro.locals.userRole!)) return Astro.redirect('/dashboard/settings');
+const tenantId = Astro.locals.tenantId!;
+const db = createDb(env.DB);
+
+let error = '';
+let summary: ImportSummary | null = null;
+let summaryLabel = '';
+
+if (Astro.request.method === 'POST') {
+  try {
+    const form = await Astro.request.formData();
+    const intent = String(form.get('intent') ?? '');
+    const file = form.get('file');
+    if (!(file instanceof File) || file.size === 0) {
+      error = 'Choose a CSV file first.';
+    } else if (file.size > 1024 * 1024) {
+      error = 'That file is over the 1MB limit.';
+    } else {
+      const rows = parseCsv(await file.text());
+      if (rows.length - 1 > MAX_IMPORT_ROWS) {
+        error = `That file has ${rows.length - 1} data rows — the limit is ${MAX_IMPORT_ROWS} per import. Split it and try again.`;
+      } else if (intent === 'import-customers') {
+        summary = await importCustomers(db, tenantId, rows, { dedupe: form.get('dedupe') === 'on' });
+        summaryLabel = 'customers';
+      } else if (intent === 'import-jobs') {
+        summary = await importJobs(db, tenantId, rows);
+        summaryLabel = 'jobs';
+      }
+    }
+  } catch (err) {
+    error = err instanceof ImportError ? err.message : 'Import failed. Please try again.';
+    if (!(err instanceof ImportError)) console.error('[import-export]', err);
+  }
+}
+
+const exports = [
+  { kind: 'customers', title: 'Customers', desc: 'Every customer with contact details and address.', dated: false },
+  { kind: 'jobs', title: 'Jobs', desc: 'All jobs with stage, customer, and money totals.', dated: true },
+  { kind: 'invoices', title: 'Invoices', desc: 'Net, VAT, gross, and CIS — what your accountant asks for.', dated: true },
+  { kind: 'expenses', title: 'Expenses', desc: 'Job expenses with who logged them.', dated: true },
+  { kind: 'time-entries', title: 'Time entries', desc: 'Clock-ins with duration and GPS stamps.', dated: true },
+];
+---
+
+<AppShell title="Import & export" active="settings">
+  <div class="mx-auto max-w-xl space-y-5">
+    <div>
+      <a href="/dashboard/settings" class="text-sm text-dim hover:text-body">← Settings</a>
+      <h2 class="mt-1 text-2xl font-bold">Import & export</h2>
+      <p class="text-sm text-dim">Bring customers and job history in from Jobber, Tradify, ServiceM8 or any spreadsheet — and get everything out as CSV whenever you want.</p>
+    </div>
+
+    {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
+    {summary && (
+      <div class="space-y-2 rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300">
+        <p>
+          Imported {summary.inserted} {summaryLabel}
+          {summary.customersCreated > 0 && ` (created ${summary.customersCreated} new customers)`}
+          {summary.skipped.length > 0 && `, skipped ${summary.skipped.length} rows`}.
+        </p>
+        {summary.skipped.length > 0 && (
+          <details>
+            <summary class="cursor-pointer">Why rows were skipped</summary>
+            <ul class="mt-1 list-inside list-disc">
+              {summary.skipped.slice(0, 50).map((s) => (
+                <li>Row {s.row}: {s.reason}</li>
+              ))}
+              {summary.skipped.length > 50 && <li>…and {summary.skipped.length - 50} more</li>}
+            </ul>
+          </details>
+        )}
+      </div>
+    )}
+
+    <form method="POST" enctype="multipart/form-data" class="space-y-3 rounded-2xl border border-edge bg-card p-4">
+      <input type="hidden" name="intent" value="import-customers" />
+      <h3 class="font-bold">Import customers</h3>
+      <p class="text-sm text-dim">
+        CSV with a <strong>Name</strong> (or First/Last name) column; email, phone, address, city, county,
+        postcode, and notes come along when present. Headers from Jobber, Tradify, and ServiceM8 exports are
+        recognised automatically. Up to {MAX_IMPORT_ROWS.toLocaleString()} rows per file.
+      </p>
+      <input type="file" name="file" accept=".csv,text/csv" required class="min-h-12 w-full rounded-xl border border-edge-2 bg-surface px-3 py-2.5 text-sm text-dim file:mr-3 file:rounded-lg file:border-0 file:bg-card-2 file:px-3 file:py-1.5 file:text-body" />
+      <label class="flex min-h-12 items-center gap-3 text-sm text-dim">
+        <input type="checkbox" name="dedupe" checked class="h-5 w-5 rounded border-edge-2 bg-surface accent-orange-600" />
+        Skip rows that match an existing customer’s email or phone
+      </label>
+      <button type="submit" class="w-full min-h-12 rounded-xl bg-primary font-semibold text-white hover:bg-primary-2">Import customers</button>
+    </form>
+
+    <form method="POST" enctype="multipart/form-data" class="space-y-3 rounded-2xl border border-edge bg-card p-4">
+      <input type="hidden" name="intent" value="import-jobs" />
+      <h3 class="font-bold">Import historic jobs</h3>
+      <p class="text-sm text-dim">
+        CSV with <strong>Customer</strong> and <strong>Total</strong> columns; title, status, VAT, dates, and
+        paid date come along when present. Customers are matched by email, then phone, then name — new ones are
+        created automatically. Files without a VAT column import with VAT £0. Imported invoices are never
+        auto-chased, and no payment records are created — paid dates and totals drive your reports.
+      </p>
+      <input type="file" name="file" accept=".csv,text/csv" required class="min-h-12 w-full rounded-xl border border-edge-2 bg-surface px-3 py-2.5 text-sm text-dim file:mr-3 file:rounded-lg file:border-0 file:bg-card-2 file:px-3 file:py-1.5 file:text-body" />
+      <button type="submit" class="w-full min-h-12 rounded-xl bg-primary font-semibold text-white hover:bg-primary-2">Import jobs</button>
+    </form>
+
+    <div class="space-y-2 rounded-2xl border border-edge bg-card p-4">
+      <h3 class="font-bold">Export CSVs</h3>
+      <p class="text-sm text-dim">Opens in Excel or Google Sheets. Money in pounds, dates in your timezone.</p>
+      <div class="space-y-2">
+        {exports.map((e) => (
+          <form method="GET" action={`/api/app/export/${e.kind}`} class="flex flex-wrap items-center gap-2 rounded-xl border border-edge-2 bg-surface px-3 py-2">
+            <span class="min-w-0 flex-1">
+              <span class="block text-sm font-medium">{e.title}</span>
+              <span class="block text-xs text-faint">{e.desc}</span>
+            </span>
+            {e.dated && (
+              <span class="flex items-center gap-1 text-xs text-faint">
+                <input type="date" name="from" class="min-h-10 rounded-lg border border-edge-2 bg-card px-2 text-xs" />
+                –
+                <input type="date" name="to" class="min-h-10 rounded-lg border border-edge-2 bg-card px-2 text-xs" />
+              </span>
+            )}
+            <button type="submit" class="min-h-10 rounded-lg border border-edge-2 px-3 text-sm font-semibold hover:border-accent">Download</button>
+          </form>
+        ))}
+      </div>
+    </div>
+
+    <div class="space-y-3 rounded-2xl border border-edge bg-card p-4">
+      <h3 class="font-bold">Full backup</h3>
+      <p class="text-sm text-dim">
+        Everything above plus your price book, document library, and job photos (newest first, up to 60MB),
+        zipped with a manifest. Your data is yours — download it any time.
+      </p>
+      <a href="/api/app/export/backup" class="block w-full min-h-12 rounded-xl bg-primary text-center font-semibold leading-[3rem] text-white hover:bg-primary-2">Download backup ZIP</a>
+    </div>
+  </div>
+</AppShell>
