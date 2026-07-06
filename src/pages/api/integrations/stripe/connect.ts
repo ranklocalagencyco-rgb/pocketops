@@ -56,7 +56,8 @@ export const GET: APIRoute = async ({ locals, url, redirect }) => {
       return_url: `${origin}/api/integrations/stripe/return`,
     });
     return redirect(link.url, 302);
-  } catch {
+  } catch (err) {
+    console.error('[stripe-connect]', err instanceof Error ? err.message : String(err));
     return redirect('/dashboard/settings/payments?error=stripe', 302);
   }
 };

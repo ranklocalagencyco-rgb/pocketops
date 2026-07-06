@@ -30,8 +30,9 @@ export const GET: APIRoute = async ({ locals, redirect }) => {
         .update(tenants)
         .set({ stripeChargesEnabled: Boolean(account.charges_enabled) })
         .where(eq(tenants.id, tenant.id));
-    } catch {
+    } catch (err) {
       // Leave the flag as-is; the Payments page re-checks on load
+      console.error('[stripe-return]', err instanceof Error ? err.message : String(err));
     }
   }
   return redirect('/dashboard/settings/payments', 302);
