@@ -66,8 +66,9 @@ secrets survive every deploy.
 Full expected list as external services come online (see
 `.dev.vars.example`): `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
 `PLATFORM_FEE_BPS` (optional), `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
-`GOOGLE_CLIENT_ID/SECRET`, `MS_CLIENT_ID/SECRET`,
+`GOOGLE_CLIENT_ID/SECRET` (set 2026-07-06),
 `QBO_CLIENT_ID/SECRET/ENVIRONMENT`, `XERO_CLIENT_ID/SECRET`.
+(Email is Gmail-only; `MS_CLIENT_ID/SECRET` are intentionally never set.)
 
 ## Local development
 

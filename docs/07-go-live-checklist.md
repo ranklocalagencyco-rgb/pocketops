@@ -41,7 +41,7 @@ Status as of 2026-07-06.
 
 > **Note:** the OAuth client ids/secrets below are *developer app
 > registrations*, not accounts. Clients always connect their **own**
-> QuickBooks/Xero books, their **own** Gmail/Outlook mailbox, and their
+> QuickBooks/Xero books, their **own** Gmail mailbox, and their
 > **own** Stripe account — the platform just registers the app that makes
 > those connections possible.
 
@@ -50,10 +50,16 @@ Status as of 2026-07-06.
       → [05-payments-stripe-connect.md](05-payments-stripe-connect.md)
 - [ ] **Twilio** — account, UK regulatory bundle, `TWILIO_ACCOUNT_SID` +
       `TWILIO_AUTH_TOKEN` → [06-phone-twilio-porting.md](06-phone-twilio-porting.md)
-- [ ] **Google OAuth app** (Gmail inbox) — `GOOGLE_CLIENT_ID/SECRET`; note
-      Gmail's restricted-scope verification review is required for production
-      use by arbitrary users
-- [ ] **Microsoft Entra app** (Outlook inbox) — `MS_CLIENT_ID/SECRET`
+- [x] **Google OAuth app** (Gmail inbox) — done 2026-07-06: project
+      `trusty-axe-501601-g1`, client "Pocket Ops Web", secrets set on the
+      Worker. App is in **Testing** mode: only test users
+      (ranklocalagencyco@gmail.com, aisurulabs@gmail.com) can connect until
+      Google's restricted-scope verification is passed — add pilot clients as
+      test users meanwhile, and add the pocketops.io redirect URI when the
+      domain lands.
+- ~~Microsoft Entra app (Outlook inbox)~~ — **dropped 2026-07-06**: the
+      product is Gmail-only (Outlook plumbing stays dormant in lib/email.ts;
+      MS_CLIENT_ID/SECRET intentionally never set)
 - [ ] **QuickBooks** — free developer app at developer.intuit.com →
       `QBO_CLIENT_ID/SECRET`, `QBO_ENVIRONMENT=production`. Each tenant then
       connects their own QuickBooks company from Settings → Accounting.

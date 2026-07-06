@@ -23,12 +23,11 @@ PLATFORM_FEE_BPS=""
 TWILIO_ACCOUNT_SID=""
 TWILIO_AUTH_TOKEN=""
 
-# Unified email inbox — Google Cloud OAuth app (scope: gmail.modify)
+# Unified email inbox — Google Cloud OAuth app (scope: gmail.modify).
+# Gmail-only by product decision (2026-07-06); Outlook plumbing exists in
+# lib/email.ts but MS_CLIENT_ID/MS_CLIENT_SECRET are intentionally never set.
 GOOGLE_CLIENT_ID=""
 GOOGLE_CLIENT_SECRET=""
-# Unified email inbox — Microsoft Entra app (scopes: Mail.Read Mail.Send)
-MS_CLIENT_ID=""
-MS_CLIENT_SECRET=""
 
 # Module 9 — QuickBooks Online
 QBO_CLIENT_ID=""

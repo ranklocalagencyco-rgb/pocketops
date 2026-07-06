@@ -22,9 +22,10 @@ const accounts = await db
   .from(emailAccounts)
   .where(tenantWhere(emailAccounts, tenantId));
 
+// Gmail-only by product decision (2026-07-06): Outlook plumbing exists in
+// lib/email.ts but is not offered — its env vars are never set.
 const providers = [
   { id: 'gmail', label: 'Gmail', hint: 'Google Workspace or personal Gmail' },
-  { id: 'outlook', label: 'Outlook', hint: 'Microsoft 365 or Outlook.com' },
 ].map((p) => ({
   ...p,
   configured: isEmailProvider(p.id) && emailProviderConfigured(p.id, env),
@@ -39,7 +40,7 @@ const errorFlash = Astro.url.searchParams.get('error');
     <div>
       <a href="/dashboard/settings" class="text-sm text-stone-400 hover:text-stone-200">← Settings</a>
       <h2 class="mt-1 text-2xl font-bold">Email</h2>
-      <p class="text-sm text-stone-400">Connect your mailbox — emails from customers join the same inbox threads as texts, and replies send from your own address.</p>
+      <p class="text-sm text-stone-400">Connect your Gmail — emails from customers join the same inbox threads as texts, and replies send from your own address.</p>
     </div>
     {connectedFlash && <p class="rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300">{connectedFlash} connected.</p>}
     {errorFlash && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">Connection failed — try again.</p>}

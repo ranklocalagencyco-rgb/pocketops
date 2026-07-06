@@ -73,9 +73,10 @@ intentionally stay light-themed.
   `constructEvent` uses Node crypto and fails in isolates).
 - **Twilio:** no Node SDK — plain `fetch` + Basic auth; inbound webhooks
   validated with HMAC-SHA1 via Web Crypto.
-- **Gmail/Outlook:** OAuth2 with refresh tokens; Gmail scope `gmail.modify`,
-  Microsoft Graph `Mail.Read`/`Mail.Send`; only ingests mail from senders
-  matching a stored customer email (spam filter).
+- **Gmail:** OAuth2 with refresh tokens, scope `gmail.modify`; only ingests
+  mail from senders matching a stored customer email (spam filter).
+  (Outlook/Graph plumbing exists in `lib/email.ts` but is not offered —
+  Gmail-only by product decision, 2026-07-06.)
 - **QuickBooks/Xero:** OAuth2, per-job ledger sync records.
 - `Astro.clientAddress` throws on this adapter — use `clientIp()` from
   `src/lib/request.ts` (reads `cf-connecting-ip`).

@@ -56,7 +56,8 @@ en-GB formatting, UK vocabulary and +44 placeholders.
 
 ## 2026-07-04 — Unified email inbox (migration 0005)
 
-Gmail + Outlook OAuth (`/api/email/[provider]/connect|callback`), messages
+Gmail + Outlook OAuth (`/api/email/[provider]/connect|callback` — Outlook was
+later dropped from the product on 2026-07-06; Gmail-only), messages
 table gained `kind` ('sms'|'email') + `subject`; email threads join the same
 inbox; replies auto-route out through the connected mailbox (SMS via Twilio).
 Sync on demand + via daily cron. Only ingests senders matching a customer's
