@@ -36,10 +36,9 @@ const history = await db
   .orderBy(desc(ledgerSyncRecords.createdAt))
   .limit(10);
 
-const providers = [
-  { id: 'quickbooks', label: 'QuickBooks Online' },
-  { id: 'xero', label: 'Xero' },
-].map((p) => ({
+// Xero was dropped from the product (2026-07-07) — QuickBooks only. The OAuth
+// plumbing in lib/accounting.ts stays dormant in case it's ever revived.
+const providers = [{ id: 'quickbooks', label: 'QuickBooks Online' }].map((p) => ({
   ...p,
   configured: isProvider(p.id) && providerConfigured(p.id, env),
   connection: connections.find((c) => c.provider === p.id),
