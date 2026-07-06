@@ -39,6 +39,15 @@ export const tenants = sqliteTable('tenants', {
   slug: text('slug').notNull().unique(),
   email: text('email'),
   phone: text('phone'),
+  // Business address — letterhead on invoices/quotes and the customer portal
+  addressLine1: text('address_line1'),
+  addressLine2: text('address_line2'),
+  city: text('city'),
+  region: text('region'),
+  postalCode: text('postal_code'),
+  // Company logo in R2; png/jpeg only so pdf-lib can embed it on invoices
+  logoR2Key: text('logo_r2_key'),
+  logoContentType: text('logo_content_type'),
   currency: text('currency').notNull().default('gbp'),
   timezone: text('timezone').notNull().default('Europe/London'),
   plan: text('plan', { enum: ['trial', 'solo', 'crew', 'company'] })

@@ -178,8 +178,15 @@ const heading = isQuote ? 'Quote' : 'Invoice';
   <body class="min-h-screen bg-zinc-100 text-zinc-900">
     <main class="mx-auto max-w-lg space-y-5 p-4 pb-36">
       <header class="pt-6 text-center">
+        {tenant?.logoR2Key && (
+          <img src={`/logo/${tenant.slug}`} alt={tenant?.name} class="mx-auto mb-3 h-16 w-auto max-w-[220px] object-contain" />
+        )}
         <p class="text-sm uppercase tracking-widest text-zinc-500">{heading}</p>
         <h1 class="text-2xl font-bold">{tenant?.name}</h1>
+        {(() => {
+          const addr = [tenant?.addressLine1, tenant?.city, tenant?.postalCode].filter(Boolean).join(' · ');
+          return addr ? <p class="text-xs text-zinc-400">{addr}</p> : null;
+        })()}
         {tenant?.phone && <p class="text-zinc-500">{tenant.phone}</p>}
         {tenant?.vatNumber && <p class="text-xs text-zinc-400">VAT No. {tenant.vatNumber}</p>}
       </header>

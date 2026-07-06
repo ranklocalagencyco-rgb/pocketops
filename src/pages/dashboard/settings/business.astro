@@ -1,9 +1,15 @@
 ---
+/**
+ * Business settings — the letterhead. Name, contact, address, and company
+ * logo (R2-backed, png/jpeg ≤2MB) that appear on quotes, invoices, and the
+ * customer portal.
+ */
 import { env } from 'cloudflare:workers';
 import { eq } from 'drizzle-orm';
 import AppShell from '../../../layouts/AppShell.astro';
 import { createDb } from '../../../db';
 import { tenants } from '../../../db/schema';
+import { newId } from '../../../lib/ids';
 import { canSeeFinancials } from '../../../lib/masking';
 
 if (!canSeeFinancials(Astro.locals.userRole!)) return Astro.redirect('/dashboard/settings');
@@ -19,15 +25,59 @@ if (Astro.request.method === 'POST') {
     if (!name) {
       error = 'Business name is required.';
     } else {
-      await db
-        .update(tenants)
-        .set({
-          name,
-          phone: String(form.get('phone') ?? '').trim() || null,
-          email: String(form.get('email') ?? '').trim() || null,
-        })
-        .where(eq(tenants.id, tenantId));
-      notice = 'Business details saved.';
+      const [current] = await db
+        .select({ logoR2Key: tenants.logoR2Key })
+        .from(tenants)
+        .where(eq(tenants.id, tenantId))
+        .limit(1);
+
+      const updates: Record<string, unknown> = {
+        name,
+        phone: String(form.get('phone') ?? '').trim() || null,
+        email: String(form.get('email') ?? '').trim() || null,
+        addressLine1: String(form.get('addressLine1') ?? '').trim() || null,
+        addressLine2: String(form.get('addressLine2') ?? '').trim() || null,
+        city: String(form.get('city') ?? '').trim() || null,
+        region: String(form.get('region') ?? '').trim() || null,
+        postalCode: String(form.get('postalCode') ?? '').trim() || null,
+      };
+
+      const logo = form.get('logo');
+      const removeLogo = String(form.get('removeLogo') ?? '') === '1';
+      if (logo instanceof File && logo.size > 0) {
+        if (logo.size > 2 * 1024 * 1024) {
+          error = 'Logo must be 2MB or smaller.';
+        } else {
+          // Never trust the extension or declared MIME — files are routinely
+          // mislabelled (e.g. JPEGs named .png), and pdf-lib needs the truth
+          // to pick embedPng vs embedJpg for invoices.
+          const bytes = new Uint8Array(await logo.arrayBuffer());
+          const isPng =
+            bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+          const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+          if (!isPng && !isJpeg) {
+            error = 'Logo must be a PNG or JPEG image — that file appears to be a different format.';
+          } else {
+            const sniffedType = isPng ? 'image/png' : 'image/jpeg';
+            const key = `${tenantId}/logo/${newId()}`;
+            await env.FILES.put(key, bytes, {
+              httpMetadata: { contentType: sniffedType },
+            });
+            if (current?.logoR2Key) await env.FILES.delete(current.logoR2Key);
+            updates.logoR2Key = key;
+            updates.logoContentType = sniffedType;
+          }
+        }
+      } else if (removeLogo && current?.logoR2Key) {
+        await env.FILES.delete(current.logoR2Key);
+        updates.logoR2Key = null;
+        updates.logoContentType = null;
+      }
+
+      if (!error) {
+        await db.update(tenants).set(updates).where(eq(tenants.id, tenantId));
+        notice = 'Business details saved.';
+      }
     }
   } catch {
     error = 'Could not save. Please try again.';
@@ -35,6 +85,8 @@ if (Astro.request.method === 'POST') {
 }
 
 const [tenant] = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+// Cache-buster: the key changes on every replacement
+const logoSrc = tenant?.logoR2Key ? `/logo/${tenant.slug}?v=${tenant.logoR2Key.slice(-8)}` : null;
 ---
 
 <AppShell title="Business" active="settings">
@@ -42,15 +94,57 @@ const [tenant] = await db.select().from(tenants).where(eq(tenants.id, tenantId))
     <div>
       <a href="/dashboard/settings" class="text-sm text-stone-400 hover:text-stone-200">← Settings</a>
       <h2 class="mt-1 text-2xl font-bold">Business</h2>
-      <p class="text-sm text-stone-400">Shown on customer invoices and payment pages.</p>
+      <p class="text-sm text-stone-400">Your letterhead — shown on quotes, invoices, and payment pages.</p>
     </div>
     {notice && <p class="rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300">{notice}</p>}
     {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
-    <form method="POST" class="space-y-4 rounded-2xl border border-ink-700 bg-ink-900 p-5">
+
+    <form method="POST" enctype="multipart/form-data" class="space-y-4 rounded-2xl border border-ink-700 bg-ink-900 p-5">
       <label class="block space-y-1">
         <span class="text-sm text-stone-400">Business name</span>
         <input name="name" value={tenant?.name} required class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none" />
       </label>
+
+      <div class="space-y-2 rounded-xl border border-ink-700 bg-ink-950 p-4">
+        <span class="text-sm font-semibold text-stone-200">Company logo</span>
+        {logoSrc ? (
+          <div class="flex items-center gap-4">
+            <img src={logoSrc} alt="Current logo" class="h-16 w-auto max-w-[160px] rounded-lg bg-white object-contain p-1" />
+            <label class="flex items-center gap-2 text-sm text-stone-400">
+              <input type="checkbox" name="removeLogo" value="1" class="h-4 w-4 accent-orange-600" />
+              Remove logo
+            </label>
+          </div>
+        ) : (
+          <p class="text-sm text-stone-500">No logo yet — add one and it appears at the top of your invoices and payment pages.</p>
+        )}
+        <input type="file" name="logo" accept="image/png,image/jpeg" class="w-full text-sm text-stone-400 file:mr-3 file:min-h-10 file:rounded-lg file:border-0 file:bg-ink-800 file:px-4 file:text-sm file:font-semibold file:text-stone-200" />
+        <p class="text-xs text-stone-500">PNG or JPEG, up to 2MB. A logo on a white or transparent background prints best.</p>
+      </div>
+
+      <div class="grid gap-4 sm:grid-cols-2">
+        <label class="block space-y-1 sm:col-span-2">
+          <span class="text-sm text-stone-400">Address line 1</span>
+          <input name="addressLine1" value={tenant?.addressLine1 ?? ''} placeholder="Unit 4, Trade Park" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-600 focus:border-amber-500 focus:outline-none" />
+        </label>
+        <label class="block space-y-1 sm:col-span-2">
+          <span class="text-sm text-stone-400">Address line 2</span>
+          <input name="addressLine2" value={tenant?.addressLine2 ?? ''} class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none" />
+        </label>
+        <label class="block space-y-1">
+          <span class="text-sm text-stone-400">Town / City</span>
+          <input name="city" value={tenant?.city ?? ''} class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none" />
+        </label>
+        <label class="block space-y-1">
+          <span class="text-sm text-stone-400">County</span>
+          <input name="region" value={tenant?.region ?? ''} class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none" />
+        </label>
+        <label class="block space-y-1">
+          <span class="text-sm text-stone-400">Postcode</span>
+          <input name="postalCode" value={tenant?.postalCode ?? ''} placeholder="SW1A 1AA" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base uppercase placeholder-stone-600 focus:border-amber-500 focus:outline-none" />
+        </label>
+      </div>
+
       <label class="block space-y-1">
         <span class="text-sm text-stone-400">Office phone</span>
         <input name="phone" type="tel" value={tenant?.phone ?? ''} class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none" />
