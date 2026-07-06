@@ -1,0 +1,15 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "pocketops-cron",
+  "main": "worker.js",
+  "compatibility_date": "2026-06-01",
+  "triggers": {
+    // 06:00 UTC = 7am UK in summer, 6am in winter — before the working day
+    "crons": ["0 6 * * *"]
+  },
+  "vars": {
+    // Update to https://pocketops.io when the custom domain lands
+    "APP_URL": "https://pocketops.ranklocalagencyco.workers.dev"
+  }
+  // CRON_SECRET is a secret: npx wrangler secret put CRON_SECRET --config cron/wrangler.jsonc
+}
