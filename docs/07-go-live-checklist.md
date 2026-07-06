@@ -27,10 +27,11 @@ Status as of 2026-07-06.
       secret to `https://pocketops.io`. APP_URL drives OAuth callbacks,
       Twilio signature URLs, and every magic link, so do this before
       onboarding real clients.
-- [ ] **Daily automations trigger** — a tiny scheduled Worker (cron
-      `0 7 * * *`) that POSTs to `https://<domain>/api/cron/daily` with
-      `Authorization: Bearer <CRON_SECRET>`. Drives invoice chasing,
-      recurring-job spawning, and email sync.
+- [x] **Daily automations trigger** — done 2026-07-06: `pocketops-cron`
+      Worker (source in `cron/`, deployed via
+      `npx wrangler deploy --config cron/wrangler.jsonc`) fires 06:00 UTC
+      daily → `/api/cron/daily` with the Bearer secret. Endpoint verified
+      live in production. Update its `APP_URL` var when the domain lands.
 - [ ] Delete the orphaned APAC database:
       `npx wrangler d1 delete pocketops-db` (id `41deff0b-…`)
 - [ ] Cloudflare WAF rate-limit rule on `/login`
