@@ -3,15 +3,20 @@
   "name": "pocketops",
   "compatibility_date": "2026-06-01",
   "compatibility_flags": ["nodejs_compat"],
-  "pages_build_output_dir": "./dist",
-  // Workers AI: add the "AI" binding in the Cloudflare dashboard (or uncomment
-  // below) for production. Kept out of local config — platformProxy cannot
-  // initialise it without a Cloudflare login and it kills `astro dev`.
-  // "ai": { "binding": "AI" },
+  // Deployed as a Cloudflare Worker with static assets (@astrojs/cloudflare
+  // v14 emits dist/server/wrangler.json + a config redirect for `wrangler
+  // deploy`). Do NOT add pages_build_output_dir — this is not a Pages project.
+  "ai": { "binding": "AI" },
+  // Astro's session support requires a KV namespace named SESSION
+  "kv_namespaces": [
+    {
+      "binding": "SESSION",
+      "id": "b4abe365e1ad493a81194cd46c4a9861"
+    }
+  ],
   "r2_buckets": [
     {
       "binding": "FILES",
-      // Run `npx wrangler r2 bucket create pocketops-files` before remote deploy.
       "bucket_name": "pocketops-files"
     }
   ],

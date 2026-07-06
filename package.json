@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "preview": "wrangler pages dev ./dist",
+    "preview": "wrangler dev",
     "db:generate": "drizzle-kit generate",
     "db:apply:local": "wrangler d1 migrations apply pocketops-db-eu --local",
     "db:apply:remote": "wrangler d1 migrations apply pocketops-db-eu --remote"
