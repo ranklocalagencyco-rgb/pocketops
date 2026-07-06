@@ -150,6 +150,29 @@ export const sessions = sqliteTable(
 // Customers
 // ---------------------------------------------------------------------------
 
+export const passwordResets = sqliteTable(
+  'password_resets',
+  {
+    id: text('id').primaryKey(),
+    // SHA-256 hash of the emailed token — raw token is never stored.
+    tokenHash: text('token_hash').notNull().unique(),
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+    usedAt: integer('used_at', { mode: 'timestamp' }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('password_resets_tenant_idx').on(t.tenantId)],
+);
+
+// ---------------------------------------------------------------------------
+// Customers
+// ---------------------------------------------------------------------------
+
 export const customers = sqliteTable(
   'customers',
   {

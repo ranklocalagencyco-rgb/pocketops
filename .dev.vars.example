@@ -37,3 +37,10 @@ QBO_ENVIRONMENT="sandbox"
 # Module 9 — Xero
 XERO_CLIENT_ID=""
 XERO_CLIENT_SECRET=""
+
+# Forgot-password emails, via Resend (https://resend.com). Works immediately
+# with the shared onboarding@resend.dev sender — no domain verification
+# needed to start. Swap EMAIL_FROM to a pocketops.io address once the domain
+# is verified in Resend.
+RESEND_API_KEY=""
+EMAIL_FROM=""

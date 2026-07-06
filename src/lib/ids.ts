@@ -22,6 +22,11 @@ export function newSessionToken(): string {
   return nanoid(32);
 }
 
+/** Raw password-reset token — emailed once, only its hash is stored. */
+export function newPasswordResetToken(): string {
+  return nanoid(32);
+}
+
 /** SHA-256 hex digest — sessions store only this, never the raw token. */
 export async function sha256Hex(input: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
