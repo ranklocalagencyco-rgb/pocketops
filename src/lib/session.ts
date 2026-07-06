@@ -10,7 +10,11 @@ export function sessionCookieOptions(expires: Date) {
   return {
     httpOnly: true,
     secure: true,
-    sameSite: 'strict' as const,
+    // Lax, not strict: OAuth callbacks (Intuit, Google, Stripe onboarding
+    // returns) are top-level cross-site navigations and strict withholds the
+    // cookie, so the callback runs logged-out. Lax still withholds cookies on
+    // cross-site POSTs, which is what CSRF needs with checkOrigin disabled.
+    sameSite: 'lax' as const,
     path: '/',
     expires,
   };
