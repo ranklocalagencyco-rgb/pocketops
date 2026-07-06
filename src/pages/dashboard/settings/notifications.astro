@@ -1,0 +1,228 @@
+---
+/**
+ * Push notifications — enable this device, choose which events buzz the
+ * phone, send a test. Owner/admin only: every launch category (missed
+ * calls, messages, quotes, payments, leads) is business-level signal.
+ */
+import { env } from 'cloudflare:workers';
+import { eq } from 'drizzle-orm';
+import AppShell from '../../../layouts/AppShell.astro';
+import { createDb, tenantWhere } from '../../../db';
+import { pushSubscriptions, users } from '../../../db/schema';
+import { canSeeFinancials } from '../../../lib/masking';
+import { pushConfigured, sendWebPush } from '../../../lib/webpush';
+
+if (!canSeeFinancials(Astro.locals.userRole!)) return Astro.redirect('/dashboard/settings');
+const tenantId = Astro.locals.tenantId!;
+const userId = Astro.locals.userId!;
+const db = createDb(env.DB);
+const configured = pushConfigured(env);
+
+let notice = '';
+let error = '';
+if (Astro.request.method === 'POST') {
+  try {
+    const form = await Astro.request.formData();
+    const intent = String(form.get('intent') ?? '');
+    if (intent === 'prefs') {
+      await db
+        .update(users)
+        .set({
+          notifyMissedCall: form.get('missedCall') === 'on',
+          notifyNewMessage: form.get('newMessage') === 'on',
+          notifyQuoteAccepted: form.get('quoteAccepted') === 'on',
+          notifyPayment: form.get('payment') === 'on',
+          notifyNewLead: form.get('newLead') === 'on',
+        })
+        .where(tenantWhere(users, tenantId, eq(users.id, userId)));
+      notice = 'Notification preferences saved.';
+    } else if (intent === 'test') {
+      const mySubs = await db
+        .select()
+        .from(pushSubscriptions)
+        .where(tenantWhere(pushSubscriptions, tenantId, eq(pushSubscriptions.userId, userId)));
+      if (mySubs.length === 0) {
+        error = 'No devices enabled yet — tap "Enable on this device" first.';
+      } else {
+        const results = await Promise.all(
+          mySubs.map((s) =>
+            sendWebPush(
+              env,
+              { endpoint: s.endpoint, p256dh: s.p256dh, auth: s.auth },
+              {
+                title: 'Test notification',
+                body: 'Push notifications are working on this account.',
+                url: '/dashboard/settings/notifications',
+                tag: 'test',
+              },
+              'high',
+            ),
+          ),
+        );
+        const sent = results.filter((r) => r === 'ok').length;
+        if (sent > 0) notice = `Test sent to ${sent} device${sent === 1 ? '' : 's'} — check your notifications.`;
+        else error = 'Could not deliver the test — try disabling and re-enabling on this device.';
+      }
+    }
+  } catch {
+    error = 'Could not save. Please try again.';
+  }
+}
+
+const [me] = await db
+  .select()
+  .from(users)
+  .where(tenantWhere(users, tenantId, eq(users.id, userId)))
+  .limit(1);
+const myDevices = (
+  await db
+    .select({ id: pushSubscriptions.id })
+    .from(pushSubscriptions)
+    .where(tenantWhere(pushSubscriptions, tenantId, eq(pushSubscriptions.userId, userId)))
+).length;
+
+const categories = [
+  { name: 'missedCall', label: 'Missed calls', desc: 'Someone rang your business number and the text-back went out.', on: me?.notifyMissedCall },
+  { name: 'newMessage', label: 'New messages', desc: 'A customer texted or emailed — reply from the inbox.', on: me?.notifyNewMessage },
+  { name: 'quoteAccepted', label: 'Quote accepted', desc: 'A customer accepted a quote (and paid a deposit if you take them).', on: me?.notifyQuoteAccepted },
+  { name: 'payment', label: 'Payments', desc: 'Money landed — card payments through invoice links.', on: me?.notifyPayment },
+  { name: 'newLead', label: 'New leads', desc: 'An enquiry arrived through your booking page.', on: me?.notifyNewLead },
+];
+---
+
+<AppShell title="Notifications" active="settings">
+  <div class="mx-auto max-w-xl space-y-5">
+    <div>
+      <a href="/dashboard/settings" class="text-sm text-dim hover:text-body">← Settings</a>
+      <h2 class="mt-1 text-2xl font-bold">Notifications</h2>
+      <p class="text-sm text-dim">Get a push on your phone the moment something needs you.</p>
+    </div>
+    {notice && <p class="rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300">{notice}</p>}
+    {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
+
+    {!configured ? (
+      <p class="rounded-2xl border border-edge bg-card p-5 text-sm text-dim">
+        Push notifications aren't switched on for this installation yet (missing VAPID keys).
+      </p>
+    ) : (
+      <>
+        <div id="push-ui" data-vapid={env.VAPID_PUBLIC_KEY} class="space-y-3 rounded-2xl border border-edge bg-card p-5">
+          <p class="font-semibold">This device</p>
+          <p id="push-status" class="text-sm text-dim">Checking…</p>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" id="push-enable" class="hidden min-h-12 flex-1 rounded-xl bg-primary px-4 font-semibold text-white hover:bg-primary-2">Enable on this device</button>
+            <button type="button" id="push-disable" class="hidden min-h-12 flex-1 rounded-xl border border-edge-2 bg-surface px-4 font-semibold text-body hover:border-accent">Disable on this device</button>
+          </div>
+          <form method="POST">
+            <input type="hidden" name="intent" value="test" />
+            <button type="submit" class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-sm font-semibold text-body hover:border-accent">Send a test notification</button>
+          </form>
+          <p class="text-xs text-faint">
+            {myDevices} device{myDevices === 1 ? '' : 's'} enabled on your account.
+            On iPhone, add Pocket Ops to your home screen first (Share → Add to Home Screen) — Apple only
+            allows notifications for installed apps.
+          </p>
+        </div>
+
+        <form method="POST" class="space-y-3 rounded-2xl border border-edge bg-card p-5">
+          <input type="hidden" name="intent" value="prefs" />
+          <p class="font-semibold">What to send</p>
+          {categories.map((c) => (
+            <label class="flex min-h-12 items-center justify-between gap-4 rounded-xl border border-edge bg-surface px-4 py-3">
+              <span>
+                <span class="block text-sm font-semibold">{c.label}</span>
+                <span class="block text-xs text-dim">{c.desc}</span>
+              </span>
+              <input type="checkbox" name={c.name} checked={c.on} class="h-5 w-5 shrink-0 accent-orange-600" />
+            </label>
+          ))}
+          <button type="submit" class="w-full min-h-12 rounded-xl bg-primary font-semibold text-white hover:bg-primary-2">Save preferences</button>
+          <p class="text-xs text-faint">These apply to all your devices. Notifications go to owners and admins only.</p>
+        </form>
+      </>
+    )}
+  </div>
+</AppShell>
+
+<script>
+  const ui = document.getElementById('push-ui');
+  const status = document.getElementById('push-status');
+  const enableBtn = document.getElementById('push-enable') as HTMLButtonElement | null;
+  const disableBtn = document.getElementById('push-disable') as HTMLButtonElement | null;
+
+  function b64uToUint8(s: string): Uint8Array {
+    const b64 = (s + '='.repeat((4 - (s.length % 4)) % 4)).replaceAll('-', '+').replaceAll('_', '/');
+    const bin = atob(b64);
+    return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  }
+
+  async function refresh() {
+    if (!ui || !status || !enableBtn || !disableBtn) return;
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      status.textContent =
+        'This browser does not support push notifications. On iPhone, install the app to your home screen and open it from there.';
+      return;
+    }
+    if (Notification.permission === 'denied') {
+      status.textContent =
+        'Notifications are blocked for this site — allow them in your browser settings, then come back.';
+      return;
+    }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      status.textContent = 'Notifications are ON for this device.';
+      enableBtn.classList.add('hidden');
+      disableBtn.classList.remove('hidden');
+    } else {
+      status.textContent = 'Notifications are off on this device.';
+      enableBtn.classList.remove('hidden');
+      disableBtn.classList.add('hidden');
+    }
+  }
+
+  enableBtn?.addEventListener('click', async () => {
+    if (!ui || !status) return;
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        status.textContent = 'Permission was not granted — notifications stay off.';
+        return;
+      }
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: b64uToUint8(ui.dataset.vapid || '') as BufferSource,
+      });
+      const res = await fetch('/api/app/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sub.toJSON()),
+      });
+      if (!res.ok) throw new Error('save failed');
+      window.location.reload();
+    } catch {
+      status.textContent = 'Could not enable notifications — please try again.';
+    }
+  });
+
+  disableBtn?.addEventListener('click', async () => {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        await fetch('/api/app/push/unsubscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoint: sub.endpoint }),
+        });
+        await sub.unsubscribe();
+      }
+      window.location.reload();
+    } catch {
+      if (status) status.textContent = 'Could not disable — please try again.';
+    }
+  });
+
+  refresh();
+</script>

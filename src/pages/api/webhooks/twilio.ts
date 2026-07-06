@@ -11,6 +11,7 @@ import { eq } from 'drizzle-orm';
 import { createDb, tenantValues, tenantWhere } from '../../../db';
 import { callEvents, customers, tenants } from '../../../db/schema';
 import { newId } from '../../../lib/ids';
+import { notifyTenant } from '../../../lib/notify';
 import { sendSms, twilioConfigured, validateTwilioSignature } from '../../../lib/twilio';
 
 // 'canceled' = the caller gave up while it was still ringing — exactly the
@@ -93,6 +94,12 @@ export const POST: APIRoute = async ({ request }) => {
         .set({ textBackSentAt: new Date() })
         .where(tenantWhere(callEvents, tenantId, eq(callEvents.twilioCallSid, callSid)));
     }
+    await notifyTenant(db, tenantId, 'missedCall', {
+      title: 'Missed call',
+      body: `${match?.name ?? from} called${result.ok ? ' — text-back sent, watch the inbox' : ''}`,
+      url: '/dashboard',
+      tag: `call-${callSid}`,
+    });
     // Dial-action responses play to the still-connected caller — tell them
     // help is already on its way before hanging up
     if (isDialAction) {

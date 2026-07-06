@@ -10,6 +10,7 @@ import { eq } from 'drizzle-orm';
 import { createDb, tenantValues, tenantWhere } from '../../db';
 import { customers, jobs, tenants } from '../../db/schema';
 import { newClientToken, newId } from '../../lib/ids';
+import { notifyTenant } from '../../lib/notify';
 import { sendSms, twilioConfigured } from '../../lib/twilio';
 
 const slug = Astro.params.slug ?? '';
@@ -44,15 +45,22 @@ if (Astro.request.method === 'POST') {
           tenantValues(tenant.id, { id: customerId, name, phone, addressLine1, postalCode }),
         );
       }
+      const jobId = newId();
       await db.insert(jobs).values(
         tenantValues(tenant.id, {
-          id: newId(),
+          id: jobId,
           customerId,
           title: description.slice(0, 60),
           description,
           clientToken: newClientToken(),
         }),
       );
+      await notifyTenant(db, tenant.id, 'newLead', {
+        title: 'New lead',
+        body: `${name}: "${description.slice(0, 100)}"`,
+        url: `/dashboard/jobs/${jobId}`,
+        tag: `lead-${jobId}`,
+      });
       if (twilioConfigured(env) && tenant.twilioNumber && tenant.phone) {
         await sendSms(env, {
           to: tenant.phone,

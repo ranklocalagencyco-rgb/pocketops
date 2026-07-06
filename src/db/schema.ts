@@ -127,6 +127,13 @@ export const users = sqliteTable(
     // content type is sniffed from magic bytes at upload, never trusted
     avatarR2Key: text('avatar_r2_key'),
     avatarContentType: text('avatar_content_type'),
+    // Push notification category toggles (Settings → Notifications). The
+    // master switch is having a subscribed device; these default on.
+    notifyMissedCall: integer('notify_missed_call', { mode: 'boolean' }).notNull().default(true),
+    notifyNewMessage: integer('notify_new_message', { mode: 'boolean' }).notNull().default(true),
+    notifyQuoteAccepted: integer('notify_quote_accepted', { mode: 'boolean' }).notNull().default(true),
+    notifyPayment: integer('notify_payment', { mode: 'boolean' }).notNull().default(true),
+    notifyNewLead: integer('notify_new_lead', { mode: 'boolean' }).notNull().default(true),
     createdAt: createdAt(),
   },
   (t) => [index('users_tenant_idx').on(t.tenantId)],
@@ -433,6 +440,30 @@ export const smsTemplates = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [index('sms_templates_tenant_idx').on(t.tenantId)],
+);
+
+// Web Push subscriptions — one row per device a user enabled notifications
+// on (Settings → Notifications). Endpoint is the push service URL; p256dh
+// and auth are the browser's encryption keys (RFC 8291).
+export const pushSubscriptions = sqliteTable(
+  'push_subscriptions',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    endpoint: text('endpoint').notNull(),
+    p256dh: text('p256dh').notNull(),
+    auth: text('auth').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('push_subscriptions_tenant_idx').on(t.tenantId),
+    uniqueIndex('push_subscriptions_endpoint_idx').on(t.endpoint),
+  ],
 );
 
 // Connected Gmail / Outlook mailboxes (Settings → Email)

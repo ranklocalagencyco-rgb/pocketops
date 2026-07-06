@@ -4,7 +4,7 @@ import { getCollection } from 'astro:content';
 import { eq, isNotNull } from 'drizzle-orm';
 import AppShell from '../../../layouts/AppShell.astro';
 import { createDb, tenantWhere } from '../../../db';
-import { accountingConnections, cancelReasons, customers, emailAccounts, expenses, jobSources, jobs, priceBookItems, smsTemplates, tenantDocuments, tenants, timeEntries, users } from '../../../db/schema';
+import { accountingConnections, cancelReasons, customers, emailAccounts, expenses, jobSources, jobs, priceBookItems, pushSubscriptions, smsTemplates, tenantDocuments, tenants, timeEntries, users } from '../../../db/schema';
 import { canSeeFinancials } from '../../../lib/masking';
 import { twilioConfigured } from '../../../lib/twilio';
 
@@ -58,6 +58,9 @@ const [me] = await db
   .limit(1);
 const profileCount = [me?.name, me?.phone, me?.avatarR2Key].filter(Boolean).length;
 const guidesCount = (await getCollection('help')).length;
+const pushCount = isAdmin
+  ? (await db.select({ id: pushSubscriptions.id }).from(pushSubscriptions).where(tenantWhere(pushSubscriptions, tenantId))).length
+  : 0;
 const regionalCount =
   (tenant?.timezone ? 1 : 0) +
   (tenant?.currency ? 1 : 0) +
@@ -73,6 +76,7 @@ const cards = [
   { href: '/dashboard/settings/pricebook', title: 'Price Book', desc: 'Reusable labor, materials, and fees for fast quoting.', count: bookCount },
   { href: '/dashboard/settings/documents', title: 'Documents', desc: 'Insurance, qualifications, and T&Cs — share in one tap.', count: docsCount },
   { href: '/dashboard/settings/messaging', title: 'Messaging', desc: 'Missed-call text-back, quiet hours, and your number.', count: messagingCount },
+  { href: '/dashboard/settings/notifications', title: 'Notifications', desc: 'Push alerts for calls, messages, quotes, and payments.', count: pushCount },
   { href: '/dashboard/settings/sms-templates', title: 'SMS templates', desc: 'The texts you send every day, one tap away.', count: templatesCount },
   { href: '/dashboard/settings/pipeline', title: 'Pipeline insights', desc: 'Job sources and reasons work falls through.', count: pipelineCount },
   { href: '/dashboard/settings/email', title: 'Email', desc: 'Gmail — customer emails join inbox threads.', count: emailCount },

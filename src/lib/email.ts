@@ -8,6 +8,7 @@ import { tenantValues, tenantWhere, type Db } from '../db';
 import { customers, emailAccounts, messages } from '../db/schema';
 import { newId } from './ids';
 import { logMessage } from './messages';
+import { notifyTenant } from './notify';
 
 export type EmailProvider = 'gmail' | 'outlook';
 
@@ -281,6 +282,17 @@ export async function syncEmailAccount(db: Db, env: Env, account: EmailAccount):
     .update(emailAccounts)
     .set({ lastSyncedAt: new Date(), status: 'active' })
     .where(tenantWhere(emailAccounts, tenantId, eq(emailAccounts.id, acc.id)));
+
+  // One summary push per sync, not one per email — a first sync or a busy
+  // day would otherwise buzz the phone off the table
+  if (ingested > 0) {
+    await notifyTenant(db, tenantId, 'newMessage', {
+      title: 'New email',
+      body: ingested === 1 ? '1 new customer email in your inbox' : `${ingested} new customer emails in your inbox`,
+      url: '/dashboard/inbox',
+      tag: 'email-sync',
+    });
+  }
   return ingested;
 }
 

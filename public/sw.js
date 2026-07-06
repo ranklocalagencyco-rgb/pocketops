@@ -3,7 +3,7 @@
  * Techs in basements/dead zones still see the last-good copy of their
  * dashboard, job list, and job detail pages.
  */
-const CACHE = 'pocketops-v5';
+const CACHE = 'pocketops-v6';
 const PRECACHE = ['/dashboard', '/manifest.json', '/icons/icon-192.png'];
 
 self.addEventListener('install', (event) => {
@@ -21,6 +21,42 @@ self.addEventListener('activate', (event) => {
       .keys()
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
+  );
+});
+
+// Web Push: show the notification the server encrypted for this device
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    /* non-JSON push — show the fallback */
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'Pocket Ops', {
+      body: data.body || '',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      tag: data.tag || undefined,
+      data: { url: data.url || '/dashboard' },
+    }),
+  );
+});
+
+// Tapping the notification focuses the app on the right page
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/dashboard';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if ('focus' in client) {
+          client.navigate(url);
+          return client.focus();
+        }
+      }
+      return clients.openWindow(url);
+    }),
   );
 });
 

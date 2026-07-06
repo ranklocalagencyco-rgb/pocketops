@@ -13,7 +13,8 @@ import { eq } from 'drizzle-orm';
 import { createDb, tenantValues, tenantWhere } from '../../../db';
 import { jobLineItems, jobs, payments, tenants } from '../../../db/schema';
 import { newId } from '../../../lib/ids';
-import { cisDeductionCents } from '../../../lib/jobs';
+import { cisDeductionCents, fmtMoney } from '../../../lib/jobs';
+import { notifyTenant } from '../../../lib/notify';
 import { handleJobPaid } from '../../../lib/post-payment';
 import { getStripe, webhookCryptoProvider } from '../../../lib/stripe';
 
@@ -96,6 +97,12 @@ export const POST: APIRoute = async ({ request }) => {
             paidAt: now,
           }),
         );
+        await notifyTenant(db, tenantId, 'quoteAccepted', {
+          title: 'Quote accepted',
+          body: `${session.metadata?.acceptName ?? 'Your customer'} accepted "${job.title}" and paid a ${fmtMoney(depositCents, session.currency ?? 'gbp')} deposit`,
+          url: `/dashboard/jobs/${jobId}`,
+          tag: `accept-${jobId}`,
+        });
       }
 
       // Balance / part payments — job flips to paid only when fully covered
@@ -158,6 +165,12 @@ export const POST: APIRoute = async ({ request }) => {
             .set({ updatedAt: paidAt })
             .where(tenantWhere(jobs, tenantId, eq(jobs.id, jobId)));
         }
+        await notifyTenant(db, tenantId, 'payment', {
+          title: 'Payment received',
+          body: `${fmtMoney(session.amount_total ?? job.totalCents, session.currency ?? 'gbp')} for "${job.title}"${paidSum >= owed ? ' — paid in full' : ' (part payment)'}`,
+          url: `/dashboard/jobs/${jobId}`,
+          tag: `pay-${jobId}`,
+        });
       }
     }
   }

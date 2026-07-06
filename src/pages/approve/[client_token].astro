@@ -14,6 +14,7 @@ import { and, asc, eq } from 'drizzle-orm';
 import { createDb } from '../../db';
 import { customers, jobLineItems, jobs, payments, signatures, tenantDocuments, tenants } from '../../db/schema';
 import { cisDeductionCents, fmtDateTz, fmtMoney, parseMoney } from '../../lib/jobs';
+import { notifyTenant } from '../../lib/notify';
 import { getStripe, platformFeeCents } from '../../lib/stripe';
 
 const token = Astro.params.client_token ?? '';
@@ -121,6 +122,12 @@ if (Astro.request.method === 'POST') {
         .update(jobs)
         .set({ status: 'approved', quoteAcceptedAt: new Date(), quoteAcceptedName: acceptName, updatedAt: new Date() })
         .where(eq(jobs.id, job.id));
+      await notifyTenant(db, job.tenantId, 'quoteAccepted', {
+        title: 'Quote accepted',
+        body: `${acceptName} accepted "${job.title}" (${fmtMoney(job.totalCents, currency ?? 'gbp')})`,
+        url: `/dashboard/jobs/${job.id}`,
+        tag: `accept-${job.id}`,
+      });
       return Astro.redirect(`/approve/${token}?accepted=1`, 303);
     }
   } else if (intent === 'pay' && payable) {
