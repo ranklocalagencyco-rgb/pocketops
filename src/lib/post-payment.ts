@@ -9,6 +9,7 @@ import { tenantValues, tenantWhere, type Db } from '../db';
 import { customers, reviewRequests, tenants } from '../db/schema';
 import { syncPaidJob } from './accounting';
 import { newId } from './ids';
+import { withinSendingHours } from './quiet-hours';
 import { sendSms, twilioConfigured } from './twilio';
 
 export async function handleJobPaid(
@@ -48,7 +49,9 @@ async function triggerReviewLoop(
       }),
     );
 
-    if (twilioConfigured(env) && tenant.twilioNumber) {
+    // Late-night payments don't earn a 1am text; the request row still exists
+    // so the tenant can chase a review manually from the job page.
+    if (twilioConfigured(env) && tenant.twilioNumber && withinSendingHours(tenant)) {
       // Custom template from Settings → Reviews; {name} and {link} supported
       const template = tenant.reviewMessage?.trim();
       const firstName = customer.name.split(/\s+/)[0] ?? 'there';

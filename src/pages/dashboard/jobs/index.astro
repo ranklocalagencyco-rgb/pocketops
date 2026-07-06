@@ -24,6 +24,7 @@ const rows = await db
     status: jobs.status,
     totalCents: jobs.totalCents,
     scheduledAt: jobs.scheduledAt,
+    updatedAt: jobs.updatedAt,
     customerName: customers.name,
   })
   .from(jobs)
@@ -38,6 +39,16 @@ const rows = await db
     ),
   )
   .orderBy(desc(jobs.updatedAt));
+
+// Heat: leads/quotes going cold — amber at 5+ days untouched, red at 10+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const heat = (j: { status: JobStatus; updatedAt: Date }): string | null => {
+  if (j.status !== 'lead' && j.status !== 'quoted') return null;
+  const idle = Date.now() - j.updatedAt.getTime();
+  if (idle > 10 * DAY_MS) return 'bg-red-400';
+  if (idle > 5 * DAY_MS) return 'bg-accent';
+  return null;
+};
 
 const statusColors: Record<JobStatus, string> = {
   lead: 'bg-sky-950 text-sky-300 border-sky-800',
@@ -77,7 +88,10 @@ const statusColors: Record<JobStatus, string> = {
       {rows.map((j) => (
         <a href={`/dashboard/jobs/${j.id}`} class="flex min-h-16 items-center justify-between gap-3 rounded-2xl border border-edge bg-card px-4 py-3 hover:border-accent/50">
           <div class="min-w-0">
-            <p class="truncate font-medium">{j.title}</p>
+            <p class="flex items-center gap-2 truncate font-medium">
+              {heat(j) && <span class={`h-2 w-2 shrink-0 rounded-full ${heat(j)}`} title="No movement in 5+ days" />}
+              <span class="truncate">{j.title}</span>
+            </p>
             <p class="truncate text-sm text-dim">
               {j.customerName}{j.scheduledAt ? ` · ${j.scheduledAt.toLocaleDateString('en-GB')}` : ''}
             </p>

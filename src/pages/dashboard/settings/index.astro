@@ -3,7 +3,7 @@ import { env } from 'cloudflare:workers';
 import { eq, isNotNull } from 'drizzle-orm';
 import AppShell from '../../../layouts/AppShell.astro';
 import { createDb, tenantWhere } from '../../../db';
-import { accountingConnections, customers, emailAccounts, expenses, jobs, priceBookItems, tenantDocuments, tenants, timeEntries, users } from '../../../db/schema';
+import { accountingConnections, cancelReasons, customers, emailAccounts, expenses, jobSources, jobs, priceBookItems, smsTemplates, tenantDocuments, tenants, timeEntries, users, webForms } from '../../../db/schema';
 import { canSeeFinancials } from '../../../lib/masking';
 import { twilioConfigured } from '../../../lib/twilio';
 
@@ -43,6 +43,16 @@ const hasRows = async (table: typeof customers | typeof jobs | typeof expenses |
 const dataCount = isAdmin
   ? (await Promise.all([customers, jobs, expenses, timeEntries, tenantDocuments].map(hasRows))).reduce((a, b) => a + b, 0)
   : 0;
+const templatesCount = isAdmin
+  ? (await db.select({ id: smsTemplates.id }).from(smsTemplates).where(tenantWhere(smsTemplates, tenantId))).length
+  : 0;
+const pipelineCount = isAdmin
+  ? (await db.select({ id: jobSources.id }).from(jobSources).where(tenantWhere(jobSources, tenantId))).length +
+    (await db.select({ id: cancelReasons.id }).from(cancelReasons).where(tenantWhere(cancelReasons, tenantId))).length
+  : 0;
+const formsCount = isAdmin
+  ? (await db.select({ id: webForms.id }).from(webForms).where(tenantWhere(webForms, tenantId, eq(webForms.isActive, true)))).length
+  : 0;
 const regionalCount =
   (tenant?.timezone ? 1 : 0) +
   (tenant?.currency ? 1 : 0) +
@@ -55,7 +65,10 @@ const cards = [
   { href: '/dashboard/settings/team', title: 'Team', desc: 'Techs, admins, roles, and private hourly costs.', count: teamCount },
   { href: '/dashboard/settings/pricebook', title: 'Price Book', desc: 'Reusable labor, materials, and fees for fast quoting.', count: bookCount },
   { href: '/dashboard/settings/documents', title: 'Documents', desc: 'Insurance, qualifications, and T&Cs — share in one tap.', count: docsCount },
-  { href: '/dashboard/settings/messaging', title: 'Messaging', desc: 'Missed-call text-back number and message.', count: messagingCount },
+  { href: '/dashboard/settings/messaging', title: 'Messaging', desc: 'Missed-call text-back, quiet hours, and your number.', count: messagingCount },
+  { href: '/dashboard/settings/sms-templates', title: 'SMS templates', desc: 'The texts you send every day, one tap away.', count: templatesCount },
+  { href: '/dashboard/settings/pipeline', title: 'Pipeline insights', desc: 'Job sources and reasons work falls through.', count: pipelineCount },
+  { href: '/dashboard/settings/web-forms', title: 'Web forms', desc: 'Embeddable quote forms for your website.', count: formsCount },
   { href: '/dashboard/settings/email', title: 'Email', desc: 'Gmail — customer emails join inbox threads.', count: emailCount },
   { href: '/dashboard/settings/reviews', title: 'Reviews', desc: 'Review link and the SMS sent after payment.', count: reviewsCount },
   { href: '/dashboard/settings/payments', title: 'Payments', desc: 'Connect Stripe — invoices paid straight to your bank.', count: stripeCount },

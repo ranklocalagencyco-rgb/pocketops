@@ -5,6 +5,7 @@ import AppShell from '../../../layouts/AppShell.astro';
 import { createDb, tenantValues, tenantWhere } from '../../../db';
 import {
   certificates,
+  cancelReasons,
   CERT_TYPES,
   customers,
   expenses,
@@ -68,6 +69,10 @@ if (Astro.request.method === 'POST') {
         if (to === 'invoiced') patch.invoicedAt = now;
         if (to === 'completed') patch.completedAt = now;
         if (to === 'paid') patch.paidAt = now; // manual (cash/check) payment
+        if (to === 'cancelled') {
+          patch.cancelledReason = String(form.get('cancelledReason') ?? '').trim().slice(0, 100) || null;
+        }
+        if (job.status === 'cancelled' && to === 'lead') patch.cancelledReason = null; // reopened
         await db.update(jobs).set(patch).where(tenantWhere(jobs, tenantId, eq(jobs.id, jobId)));
         if (to === 'paid') {
           // Manual payments get the same automation as Stripe payments:
@@ -348,6 +353,9 @@ const certRows = await db
   .where(tenantWhere(certificates, tenantId, eq(certificates.jobId, jobId)));
 
 const nextStatuses = TRANSITIONS[job.status];
+const reasonOptions = nextStatuses.includes('cancelled')
+  ? await db.select({ name: cancelReasons.name }).from(cancelReasons).where(tenantWhere(cancelReasons, tenantId)).orderBy(cancelReasons.name)
+  : [];
 const magicLink = `${Astro.url.origin}/approve/${job.clientToken}`;
 const totalCostCents = items.reduce((s, li) => s + Math.round(li.quantity * (li.unitCostCents ?? 0)), 0);
 const marginCents = job.subtotalCents - totalCostCents;
@@ -478,17 +486,39 @@ const balanceCents = Math.max(0, job.totalCents - cisCents - paidSoFarCents);
     {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
 
     {nextStatuses.length > 0 && (
-      <div class="flex flex-wrap gap-2">
-        {nextStatuses.map((to) => (
+      <div class="flex flex-wrap items-start gap-2">
+        {nextStatuses.filter((to) => to !== 'cancelled').map((to) => (
           <form method="POST">
             <input type="hidden" name="intent" value="status" />
             <input type="hidden" name="to" value={to} />
-            <button type="submit" class={`min-h-12 rounded-xl px-4 font-semibold ${to === 'cancelled' ? 'border border-edge-2 text-dim hover:text-red-300' : 'bg-primary text-white hover:bg-primary-2'}`}>
+            <button type="submit" class="min-h-12 rounded-xl bg-primary px-4 font-semibold text-white hover:bg-primary-2">
               {to === 'paid' ? 'Mark paid (cash/cheque)' : `→ ${STATUS_LABELS[to]}`}
             </button>
           </form>
         ))}
+        {nextStatuses.includes('cancelled') && (
+          <details class="min-w-40">
+            <summary class="flex min-h-12 cursor-pointer items-center rounded-xl border border-edge-2 px-4 font-semibold text-dim hover:text-red-300">Cancel job…</summary>
+            <form method="POST" class="mt-2 flex flex-wrap gap-2">
+              <input type="hidden" name="intent" value="status" />
+              <input type="hidden" name="to" value="cancelled" />
+              {reasonOptions.length > 0 ? (
+                <select name="cancelledReason" class="min-h-12 rounded-xl border border-edge-2 bg-card px-3 text-sm focus:border-accent focus:outline-none">
+                  <option value="">No reason given</option>
+                  {reasonOptions.map((r) => <option value={r.name}>{r.name}</option>)}
+                </select>
+              ) : (
+                <input name="cancelledReason" placeholder="Why? (optional)" class="min-h-12 rounded-xl border border-edge-2 bg-card px-3 text-sm placeholder-faint focus:border-accent focus:outline-none" />
+              )}
+              <button type="submit" class="min-h-12 rounded-xl border border-red-800 px-4 text-sm font-semibold text-red-300 hover:bg-red-950">Confirm cancel</button>
+            </form>
+          </details>
+        )}
       </div>
+    )}
+
+    {job.status === 'cancelled' && job.cancelledReason && (
+      <p class="rounded-lg border border-edge bg-card px-4 py-3 text-sm text-dim">Cancelled — {job.cancelledReason}</p>
     )}
 
     {(job.status === 'invoiced' || job.status === 'paid') && (

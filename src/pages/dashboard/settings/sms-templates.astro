@@ -1,0 +1,100 @@
+---
+import { env } from 'cloudflare:workers';
+import { eq } from 'drizzle-orm';
+import AppShell from '../../../layouts/AppShell.astro';
+import { createDb, tenantValues, tenantWhere } from '../../../db';
+import { smsTemplates } from '../../../db/schema';
+import { newId } from '../../../lib/ids';
+import { canSeeFinancials } from '../../../lib/masking';
+
+if (!canSeeFinancials(Astro.locals.userRole!)) return Astro.redirect('/dashboard/settings');
+const tenantId = Astro.locals.tenantId!;
+const db = createDb(env.DB);
+
+let notice = '';
+let error = '';
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const intent = String(form.get('intent') ?? '');
+  if (intent === 'add') {
+    const name = String(form.get('name') ?? '').trim().slice(0, 60);
+    const body = String(form.get('body') ?? '').trim().slice(0, 1600);
+    if (!name || !body) {
+      error = 'Give the template a name and a message.';
+    } else {
+      await db.insert(smsTemplates).values(tenantValues(tenantId, { id: newId(), name, body }));
+      notice = 'Template saved.';
+    }
+  } else if (intent === 'delete') {
+    await db
+      .delete(smsTemplates)
+      .where(tenantWhere(smsTemplates, tenantId, eq(smsTemplates.id, String(form.get('templateId') ?? ''))));
+    notice = 'Template deleted.';
+  }
+}
+
+const templates = await db
+  .select()
+  .from(smsTemplates)
+  .where(tenantWhere(smsTemplates, tenantId))
+  .orderBy(smsTemplates.name);
+
+const STARTERS = [
+  { name: 'On my way', body: "Hi {name}, it's on the way — should be with you within the hour." },
+  { name: 'Running late', body: 'Hi {name}, running about 30 minutes behind this morning — sorry for the wait, see you soon.' },
+  { name: 'Quote follow-up', body: 'Hi {name}, just checking you got the quote we sent over — happy to answer any questions.' },
+];
+---
+
+<AppShell title="SMS templates" active="settings">
+  <div class="mx-auto max-w-xl space-y-5">
+    <div>
+      <a href="/dashboard/settings" class="text-sm text-dim hover:text-body">← Settings</a>
+      <h2 class="mt-1 text-2xl font-bold">SMS templates</h2>
+      <p class="text-sm text-dim">The messages you send every day, one tap away in the inbox. Use {'{name}'} and it becomes the customer's first name.</p>
+    </div>
+    {notice && <p class="rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300">{notice}</p>}
+    {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
+
+    <form method="POST" class="space-y-3 rounded-2xl border border-edge bg-card p-4">
+      <input type="hidden" name="intent" value="add" />
+      <input name="name" required placeholder="Template name (e.g. On my way)" class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
+      <textarea name="body" required rows="3" placeholder="Hi {name}, it's on the way — should be with you within the hour." class="w-full rounded-xl border border-edge-2 bg-surface px-4 py-3 text-base placeholder-faint focus:border-accent focus:outline-none"></textarea>
+      <button type="submit" class="w-full min-h-12 rounded-xl bg-primary font-semibold text-white hover:bg-primary-2">Add template</button>
+    </form>
+
+    {templates.length === 0 && (
+      <div class="space-y-2 rounded-2xl border border-dashed border-edge-2 p-5 text-sm">
+        <p class="text-faint">No templates yet — a few that earn their keep:</p>
+        {STARTERS.map((s) => (
+          <form method="POST" class="flex items-center gap-3 rounded-xl border border-edge bg-card px-3 py-2">
+            <input type="hidden" name="intent" value="add" />
+            <input type="hidden" name="name" value={s.name} />
+            <input type="hidden" name="body" value={s.body} />
+            <span class="min-w-0 flex-1">
+              <span class="block text-sm font-medium">{s.name}</span>
+              <span class="block truncate text-xs text-faint">{s.body}</span>
+            </span>
+            <button type="submit" class="min-h-10 rounded-lg border border-edge-2 px-3 text-xs font-semibold hover:border-accent">Add</button>
+          </form>
+        ))}
+      </div>
+    )}
+
+    <div class="space-y-2">
+      {templates.map((t) => (
+        <div class="flex items-start gap-3 rounded-2xl border border-edge bg-card px-4 py-3">
+          <span class="min-w-0 flex-1">
+            <span class="block font-medium">{t.name}</span>
+            <span class="block text-sm text-dim">{t.body}</span>
+          </span>
+          <form method="POST">
+            <input type="hidden" name="intent" value="delete" />
+            <input type="hidden" name="templateId" value={t.id} />
+            <button type="submit" class="min-h-12 min-w-10 rounded-lg text-faint hover:text-red-400" aria-label={`Delete ${t.name}`}>✕</button>
+          </form>
+        </div>
+      ))}
+    </div>
+  </div>
+</AppShell>

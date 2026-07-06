@@ -3,7 +3,7 @@ import { env } from 'cloudflare:workers';
 import { desc, eq, isNotNull, isNull } from 'drizzle-orm';
 import AppShell from '../../layouts/AppShell.astro';
 import { createDb, tenantWhere } from '../../db';
-import { customers, emailAccounts, messages, tenants } from '../../db/schema';
+import { customers, emailAccounts, messages, smsTemplates, tenants } from '../../db/schema';
 import { sendAndLogEmail } from '../../lib/email';
 import { fmtDateTz } from '../../lib/jobs';
 import { sendAndLogSms } from '../../lib/messages';
@@ -116,6 +116,11 @@ for (const m of all) {
 }
 const thread = withPhone ? all.filter((m) => m.phone === withPhone).reverse() : [];
 const threadName = threads.find((t) => t.phone === withPhone)?.name ?? withPhone;
+const templates = withPhone
+  ? await db.select().from(smsTemplates).where(tenantWhere(smsTemplates, tenantId)).orderBy(smsTemplates.name)
+  : [];
+const knownName = threads.find((t) => t.phone === withPhone)?.name;
+const threadFirstName = knownName ? (knownName.split(/\s+/)[0] ?? 'there') : 'there';
 ---
 
 <AppShell title="Inbox" active="inbox">
@@ -167,6 +172,14 @@ const threadName = threads.find((t) => t.phone === withPhone)?.name ?? withPhone
         ))}
       </div>
       {sendError && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{sendError}</p>}
+      {templates.length > 0 && (
+        <select id="template-pick" data-first-name={threadFirstName} class="w-full min-h-12 rounded-xl border border-edge-2 bg-card px-3 text-sm text-dim focus:border-accent focus:outline-none">
+          <option value="">Insert a template…</option>
+          {templates.map((t) => (
+            <option value={t.body}>{t.name}</option>
+          ))}
+        </select>
+      )}
       <form method="POST" class="flex gap-2">
         <input name="body" id="reply-body" required placeholder="Type a reply…" autocomplete="off" class="min-h-12 flex-1 rounded-xl border border-edge-2 bg-card px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
         <button type="button" id="ai-draft" title="Draft a reply with AI" class="min-h-12 rounded-xl border border-edge-2 px-3 text-lg hover:border-accent">✨</button>
@@ -177,6 +190,15 @@ const threadName = threads.find((t) => t.phone === withPhone)?.name ?? withPhone
 </AppShell>
 
 <script>
+  const pick = document.getElementById('template-pick') as HTMLSelectElement | null;
+  pick?.addEventListener('change', () => {
+    if (!pick.value) return;
+    const input = document.getElementById('reply-body') as HTMLInputElement;
+    input.value = pick.value.replaceAll('{name}', pick.dataset.firstName || 'there');
+    input.focus();
+    pick.selectedIndex = 0;
+  });
+
   document.getElementById('ai-draft')?.addEventListener('click', async () => {
     const input = document.getElementById('reply-body') as HTMLInputElement;
     const btn = document.getElementById('ai-draft') as HTMLButtonElement;

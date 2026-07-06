@@ -17,6 +17,7 @@ import { syncEmailAccount } from '../../../lib/email';
 import { newClientToken, newId } from '../../../lib/ids';
 import { fmtMoney } from '../../../lib/jobs';
 import { sendAndLogSms } from '../../../lib/messages';
+import { withinSendingHours } from '../../../lib/quiet-hours';
 import { twilioConfigured } from '../../../lib/twilio';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -32,6 +33,10 @@ async function runAutomations(db: Db) {
 
   const allTenants = await db.select().from(tenants);
   for (const tenant of allTenants) {
+    // Quiet hours: outside the tenant's window texts wait for tomorrow's run;
+    // the chase cadence and recurrence lead time tolerate a day's slip.
+    const canTextNow = canText && withinSendingHours(tenant);
+
     // --- 1. Chase overdue invoices ---
     const overdue = await db
       .select()
@@ -48,6 +53,7 @@ async function runAutomations(db: Db) {
       );
     for (const job of overdue) {
       if (job.lastChasedAt && job.lastChasedAt.getTime() > now - CHASE_AFTER_DAYS * DAY) continue;
+      if (canText && !canTextNow) continue; // retry tomorrow inside hours
       const [customer] = await db
         .select()
         .from(customers)
@@ -110,7 +116,7 @@ async function runAutomations(db: Db) {
         .from(customers)
         .where(tenantWhere(customers, tenant.id, eq(customers.id, job.customerId)))
         .limit(1);
-      if (canText && tenant.twilioNumber && customer?.phone) {
+      if (canTextNow && tenant.twilioNumber && customer?.phone) {
         await sendAndLogSms(db, env, tenant.id, {
           to: customer.phone,
           from: tenant.twilioNumber,

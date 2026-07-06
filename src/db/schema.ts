@@ -75,6 +75,9 @@ export const tenants = sqliteTable('tenants', {
   // Custom SMS templates; {name} and {link} placeholders supported
   missedCallMessage: text('missed_call_message'),
   reviewMessage: text('review_message'),
+  // Quiet hours (tenant tz, HH:MM) — automated texts only send inside this window
+  quietHoursStart: text('quiet_hours_start').notNull().default('08:00'),
+  quietHoursEnd: text('quiet_hours_end').notNull().default('20:00'),
   createdAt: createdAt(),
 });
 
@@ -201,6 +204,37 @@ export const customers = sqliteTable(
 );
 
 // ---------------------------------------------------------------------------
+// Pipeline insights — where jobs come from and why they cancel
+// ---------------------------------------------------------------------------
+
+export const jobSources = sqliteTable(
+  'job_sources',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    name: text('name').notNull(),
+    isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [index('job_sources_tenant_idx').on(t.tenantId)],
+);
+
+export const cancelReasons = sqliteTable(
+  'cancel_reasons',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    name: text('name').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('cancel_reasons_tenant_idx').on(t.tenantId)],
+);
+
+// ---------------------------------------------------------------------------
 // Job lifecycle engine (Module 4)
 // ---------------------------------------------------------------------------
 
@@ -255,6 +289,10 @@ export const jobs = sqliteTable(
     chaseCount: integer('chase_count').notNull().default(0),
     // CIS subcontractor invoice: VAT reverse charge + 20% deduction on labour
     cisReverseCharge: integer('cis_reverse_charge', { mode: 'boolean' }).notNull().default(false),
+    // Where the job came from (Settings → Pipeline insights); web forms auto-tag
+    sourceId: text('source_id').references(() => jobSources.id),
+    // Snapshot of the reason chosen when cancelling — survives list edits
+    cancelledReason: text('cancelled_reason'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -375,6 +413,43 @@ export const messages = sqliteTable(
   (t) => [
     index('messages_tenant_idx').on(t.tenantId),
     index('messages_tenant_phone_idx').on(t.tenantId, t.phone),
+  ],
+);
+
+// Reusable SMS bodies (Settings → SMS templates); {name} placeholder supported
+export const smsTemplates = sqliteTable(
+  'sms_templates',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    name: text('name').notNull(),
+    body: text('body').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('sms_templates_tenant_idx').on(t.tenantId)],
+);
+
+// Embeddable lead-capture forms (Settings → Web forms) — public by token,
+// submissions create a customer + lead job tagged with the form's source
+export const webForms = sqliteTable(
+  'web_forms',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    name: text('name').notNull(),
+    token: text('token').notNull(),
+    intro: text('intro'),
+    sourceId: text('source_id').references(() => jobSources.id),
+    isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('web_forms_tenant_idx').on(t.tenantId),
+    uniqueIndex('web_forms_token_idx').on(t.token),
   ],
 );
 

@@ -33,6 +33,12 @@ if (Astro.request.method === 'POST') {
           twilioNumber: String(form.get('twilioNumber') ?? '').trim() || null,
           twilioForwardNumber: String(form.get('twilioForwardNumber') ?? '').trim() || null,
           missedCallMessage: String(form.get('missedCallMessage') ?? '').trim() || null,
+          quietHoursStart: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(form.get('quietHoursStart')))
+            ? String(form.get('quietHoursStart'))
+            : '08:00',
+          quietHoursEnd: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(form.get('quietHoursEnd')))
+            ? String(form.get('quietHoursEnd'))
+            : '20:00',
         })
         .where(eq(tenants.id, tenantId));
       notice = 'Messaging settings saved.';
@@ -213,6 +219,15 @@ const stepIndex = activePort ? PORT_STEPS.findIndex((s) => s.key === activePort.
         <textarea name="missedCallMessage" rows="3" placeholder={`Sorry we missed your call — this is ${tenant?.name}. Reply here and we'll get right back to you!`} class="w-full rounded-xl border border-edge-2 bg-surface px-4 py-3 text-base placeholder-faint focus:border-accent focus:outline-none">{tenant?.missedCallMessage ?? ''}</textarea>
         <span class="block text-xs text-faint">Use {'{name}'} to greet known customers by first name. Leave blank for the default message.</span>
       </label>
+      <div class="space-y-1">
+        <p class="text-sm text-dim">Quiet hours</p>
+        <div class="flex items-center gap-2">
+          <input type="time" name="quietHoursStart" value={tenant?.quietHoursStart ?? '08:00'} class="min-h-12 rounded-xl border border-edge-2 bg-surface px-3 text-base focus:border-accent focus:outline-none" />
+          <span class="text-sm text-faint">to</span>
+          <input type="time" name="quietHoursEnd" value={tenant?.quietHoursEnd ?? '20:00'} class="min-h-12 rounded-xl border border-edge-2 bg-surface px-3 text-base focus:border-accent focus:outline-none" />
+        </div>
+        <span class="block text-xs text-faint">Automated texts — invoice reminders, service nudges, review requests — only send between these times ({tenant?.timezone ?? 'Europe/London'}). Missed-call text-backs and your own replies always send straight away.</span>
+      </div>
       <button type="submit" class="w-full min-h-12 rounded-xl bg-primary font-semibold text-white hover:bg-primary-2">Save changes</button>
     </form>
 

@@ -1,0 +1,137 @@
+---
+import { env } from 'cloudflare:workers';
+import { asc, eq } from 'drizzle-orm';
+import AppShell from '../../../layouts/AppShell.astro';
+import { createDb, tenantValues, tenantWhere } from '../../../db';
+import { cancelReasons, jobSources } from '../../../db/schema';
+import { newId } from '../../../lib/ids';
+import { canSeeFinancials } from '../../../lib/masking';
+
+if (!canSeeFinancials(Astro.locals.userRole!)) return Astro.redirect('/dashboard/settings');
+const tenantId = Astro.locals.tenantId!;
+const db = createDb(env.DB);
+
+let notice = '';
+let error = '';
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const intent = String(form.get('intent') ?? '');
+  const name = String(form.get('name') ?? '').trim().slice(0, 60);
+  if (intent === 'add-source') {
+    if (!name) error = 'Give the source a name.';
+    else {
+      await db.insert(jobSources).values(tenantValues(tenantId, { id: newId(), name }));
+      notice = 'Source added.';
+    }
+  } else if (intent === 'toggle-source') {
+    const id = String(form.get('sourceId') ?? '');
+    const [s] = await db
+      .select({ isActive: jobSources.isActive })
+      .from(jobSources)
+      .where(tenantWhere(jobSources, tenantId, eq(jobSources.id, id)))
+      .limit(1);
+    if (s) {
+      await db
+        .update(jobSources)
+        .set({ isActive: !s.isActive })
+        .where(tenantWhere(jobSources, tenantId, eq(jobSources.id, id)));
+    }
+  } else if (intent === 'add-reason') {
+    if (!name) error = 'Give the reason a name.';
+    else {
+      await db.insert(cancelReasons).values(tenantValues(tenantId, { id: newId(), name }));
+      notice = 'Reason added.';
+    }
+  } else if (intent === 'delete-reason') {
+    await db
+      .delete(cancelReasons)
+      .where(tenantWhere(cancelReasons, tenantId, eq(cancelReasons.id, String(form.get('reasonId') ?? ''))));
+    notice = 'Reason deleted.';
+  } else if (intent === 'add-defaults') {
+    const defaultSources = ['Word of mouth', 'Google', 'Checkatrade', 'Facebook', 'Website', 'Repeat customer', 'Van signage'];
+    const defaultReasons = ['Price too high', 'Went with someone else', 'No response', 'Changed their mind', 'Bad timing'];
+    for (const s of defaultSources) {
+      await db.insert(jobSources).values(tenantValues(tenantId, { id: newId(), name: s }));
+    }
+    for (const r of defaultReasons) {
+      await db.insert(cancelReasons).values(tenantValues(tenantId, { id: newId(), name: r }));
+    }
+    notice = 'Starter lists added — edit them to fit how you get work.';
+  }
+}
+
+const sources = await db
+  .select()
+  .from(jobSources)
+  .where(tenantWhere(jobSources, tenantId))
+  .orderBy(asc(jobSources.name));
+const reasons = await db
+  .select()
+  .from(cancelReasons)
+  .where(tenantWhere(cancelReasons, tenantId))
+  .orderBy(asc(cancelReasons.name));
+---
+
+<AppShell title="Pipeline insights" active="settings">
+  <div class="mx-auto max-w-xl space-y-5">
+    <div>
+      <a href="/dashboard/settings" class="text-sm text-dim hover:text-body">← Settings</a>
+      <h2 class="mt-1 text-2xl font-bold">Pipeline insights</h2>
+      <p class="text-sm text-dim">Track where jobs come from and why they fall through — the dashboard turns it into "is Checkatrade actually paying for itself?"</p>
+    </div>
+    {notice && <p class="rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300">{notice}</p>}
+    {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
+
+    {sources.length === 0 && reasons.length === 0 && (
+      <form method="POST" class="rounded-2xl border border-dashed border-edge-2 p-5 text-center">
+        <input type="hidden" name="intent" value="add-defaults" />
+        <p class="text-sm text-faint">Start with the usual suspects — Google, Checkatrade, word of mouth — and the reasons quotes get lost.</p>
+        <button type="submit" class="mt-3 min-h-12 rounded-xl bg-primary px-5 font-semibold text-white hover:bg-primary-2">Add starter lists</button>
+      </form>
+    )}
+
+    <div class="space-y-3 rounded-2xl border border-edge bg-card p-4">
+      <h3 class="font-bold">Job sources</h3>
+      <p class="text-sm text-dim">Picked when creating a job; web forms tag themselves automatically. Hidden sources keep their history but leave the picker.</p>
+      <form method="POST" class="flex gap-2">
+        <input type="hidden" name="intent" value="add-source" />
+        <input name="name" required placeholder="e.g. Nextdoor" class="min-h-12 flex-1 rounded-xl border border-edge-2 bg-surface px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
+        <button type="submit" class="min-h-12 rounded-xl bg-primary px-4 font-semibold text-white hover:bg-primary-2">Add</button>
+      </form>
+      <div class="space-y-1">
+        {sources.map((s) => (
+          <form method="POST" class="flex items-center gap-3 rounded-xl border border-edge bg-surface px-3 py-1.5">
+            <input type="hidden" name="intent" value="toggle-source" />
+            <input type="hidden" name="sourceId" value={s.id} />
+            <span class={`min-w-0 flex-1 text-sm ${s.isActive ? '' : 'text-faint line-through'}`}>{s.name}</span>
+            <button type="submit" class={`min-h-10 rounded-lg px-3 text-xs font-semibold ${s.isActive ? 'text-emerald-400' : 'text-faint'}`}>
+              {s.isActive ? 'Active' : 'Hidden'}
+            </button>
+          </form>
+        ))}
+      </div>
+    </div>
+
+    <div class="space-y-3 rounded-2xl border border-edge bg-card p-4">
+      <h3 class="font-bold">Cancelled reasons</h3>
+      <p class="text-sm text-dim">Offered as choices when a job is cancelled, so you learn why work slips away.</p>
+      <form method="POST" class="flex gap-2">
+        <input type="hidden" name="intent" value="add-reason" />
+        <input name="name" required placeholder="e.g. Price too high" class="min-h-12 flex-1 rounded-xl border border-edge-2 bg-surface px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
+        <button type="submit" class="min-h-12 rounded-xl bg-primary px-4 font-semibold text-white hover:bg-primary-2">Add</button>
+      </form>
+      <div class="space-y-1">
+        {reasons.map((r) => (
+          <div class="flex items-center gap-3 rounded-xl border border-edge bg-surface px-3 py-1.5">
+            <span class="min-w-0 flex-1 text-sm">{r.name}</span>
+            <form method="POST">
+              <input type="hidden" name="intent" value="delete-reason" />
+              <input type="hidden" name="reasonId" value={r.id} />
+              <button type="submit" class="min-h-10 min-w-8 rounded-lg text-faint hover:text-red-400" aria-label={`Delete ${r.name}`}>✕</button>
+            </form>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+</AppShell>
