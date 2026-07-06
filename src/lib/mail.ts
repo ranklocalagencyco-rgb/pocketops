@@ -23,7 +23,10 @@ export async function sendMail(
       },
       body: JSON.stringify({ from, to: [opts.to], subject: opts.subject, text: opts.text }),
     });
-    if (!res.ok) return { ok: false, error: `Resend send failed: ${res.status}` };
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      return { ok: false, error: `Resend send failed: ${res.status} ${body}` };
+    }
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
