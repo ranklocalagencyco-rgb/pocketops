@@ -1,18 +1,57 @@
 ---
+/**
+ * Payments settings — Stripe Connect (Standard).
+ * Each business connects its OWN Stripe account; customer payments settle
+ * straight to their bank. Pocket Ops never touches the money.
+ */
 import { env } from 'cloudflare:workers';
+import { eq } from 'drizzle-orm';
+import { createDb } from '../../../db';
+import { tenants } from '../../../db/schema';
 import AppShell from '../../../layouts/AppShell.astro';
 import { canSeeFinancials } from '../../../lib/masking';
+import { getStripe } from '../../../lib/stripe';
 
 if (!canSeeFinancials(Astro.locals.userRole!)) return Astro.redirect('/dashboard/settings');
 
-const hasKey = Boolean(env.STRIPE_SECRET_KEY);
-const hasWebhook = Boolean(env.STRIPE_WEBHOOK_SECRET);
-const webhookUrl = `${env.APP_URL || Astro.url.origin}/api/webhooks/stripe`;
+const db = createDb(env.DB);
+const [tenant] = await db
+  .select()
+  .from(tenants)
+  .where(eq(tenants.id, Astro.locals.tenantId!))
+  .limit(1);
+if (!tenant) return Astro.redirect('/dashboard/settings');
 
-const steps = [
-  { done: hasKey, text: 'Add STRIPE_SECRET_KEY to your Cloudflare secrets (starts with sk_).' },
-  { done: hasWebhook, text: 'Create a Stripe webhook for checkout.session.completed and add its signing secret as STRIPE_WEBHOOK_SECRET.' },
-];
+const stripe = getStripe(env);
+const platformReady = Boolean(stripe);
+
+// Onboarding can finish out-of-band (email verification, etc.) — re-check
+// the account whenever the stored flag says "not yet".
+let chargesEnabled = tenant.stripeChargesEnabled;
+if (stripe && tenant.stripeAccountId && !chargesEnabled) {
+  try {
+    const account = await stripe.accounts.retrieve(tenant.stripeAccountId);
+    if (account.charges_enabled) {
+      chargesEnabled = true;
+      await db
+        .update(tenants)
+        .set({ stripeChargesEnabled: true })
+        .where(eq(tenants.id, tenant.id));
+    }
+  } catch {
+    // Show the stored state; the connect button mints a fresh onboarding link
+  }
+}
+
+const connected = Boolean(tenant.stripeAccountId);
+const live = connected && chargesEnabled;
+const hadError = Astro.url.searchParams.get('error') === 'stripe';
+
+const statusText = live
+  ? '● Payments are live — money goes straight to your bank'
+  : connected
+    ? '○ Nearly there — finish your Stripe setup to start taking payments.'
+    : '○ Not connected yet — connect Stripe to take card payments.';
 ---
 
 <AppShell title="Payments" active="settings">
@@ -20,28 +59,43 @@ const steps = [
     <div>
       <a href="/dashboard/settings" class="text-sm text-stone-400 hover:text-stone-200">← Settings</a>
       <h2 class="mt-1 text-2xl font-bold">Payments</h2>
-      <p class="text-sm text-stone-400">One-tap Stripe Checkout on every invoice link — Apple Pay, Google Pay, and cards.</p>
+      <p class="text-sm text-stone-400">One-tap Stripe Checkout on every invoice link — Apple Pay, Google Pay, and cards — paid directly into your own Stripe account.</p>
     </div>
 
-    <p class={`rounded-xl border px-4 py-3 text-sm font-medium ${hasKey && hasWebhook ? 'border-emerald-800 bg-emerald-950 text-emerald-300' : 'border-amber-800 bg-amber-950/40 text-amber-300'}`}>
-      {hasKey && hasWebhook ? '● Payments are live' : '○ Payments not live yet — finish the steps below.'}
+    {hadError && (
+      <p class="rounded-xl border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-300">Couldn't reach Stripe just then — try again.</p>
+    )}
+
+    <p class={`rounded-xl border px-4 py-3 text-sm font-medium ${live ? 'border-emerald-800 bg-emerald-950 text-emerald-300' : 'border-amber-800 bg-amber-950/40 text-amber-300'}`}>
+      {statusText}
     </p>
 
-    <div class="space-y-2 rounded-2xl border border-ink-700 bg-ink-900 p-5">
-      <p class="font-semibold">Setup checklist</p>
-      {steps.map((s) => (
-        <p class={`flex items-start gap-2 text-sm ${s.done ? 'text-emerald-400' : 'text-stone-400'}`}>
-          <span class="mt-0.5">{s.done ? '✓' : '○'}</span>
-          {s.text}
-        </p>
-      ))}
-      <p class="pt-2 text-sm text-stone-400">Point the Stripe webhook at:</p>
-      <input readonly value={webhookUrl} onclick="this.select()" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 font-mono text-xs text-amber-300" />
+    <div class="space-y-3 rounded-2xl border border-ink-700 bg-ink-900 p-5">
+      <p class="font-semibold">Your Stripe account</p>
+      {!platformReady ? (
+        <p class="text-sm text-stone-400">Online payments aren't available on this Pocket Ops installation yet. Check back soon.</p>
+      ) : live ? (
+        <>
+          <p class="text-sm text-stone-400">Connected as <span class="font-mono text-xs text-amber-300">{tenant.stripeAccountId}</span>. Payouts, refunds, and disputes are managed in your own Stripe dashboard.</p>
+          <a href="https://dashboard.stripe.com" target="_blank" rel="noopener" class="inline-flex min-h-12 items-center rounded-xl border border-ink-600 px-4 text-sm font-semibold text-stone-200 hover:bg-ink-800">Open Stripe dashboard ↗</a>
+        </>
+      ) : (
+        <>
+          <p class="text-sm text-stone-400">
+            {connected
+              ? 'Your Stripe account was created but setup isn’t finished. Pick up where you left off — it usually takes a few minutes.'
+              : 'Connect a free Stripe account (or link an existing one) so customers can pay invoices by card, Apple Pay, or Google Pay. Payouts land in your business bank account, usually within 2 working days.'}
+          </p>
+          <a href="/api/integrations/stripe/connect" class="inline-flex min-h-12 items-center rounded-xl bg-gradient-to-r from-orange-700 via-orange-600 to-amber-500 px-5 text-sm font-semibold text-white active:scale-[0.99]">
+            {connected ? 'Finish Stripe setup' : 'Connect Stripe'}
+          </a>
+        </>
+      )}
     </div>
 
     <div class="rounded-2xl border border-ink-700 bg-ink-900 p-5 text-sm text-stone-400">
       <p class="font-semibold text-stone-200">How customers pay</p>
-      <p class="mt-1">When a job moves to <span class="text-amber-300">Invoiced</span>, its job page shows a secure payment link. Text it to the customer — they tap once, pay with Apple Pay, Google Pay, or a card, and the job flips to <span class="text-emerald-300">Paid</span> automatically, firing the review text and accounting sync.</p>
+      <p class="mt-1">When a job moves to <span class="text-amber-300">Invoiced</span>, its job page shows a secure payment link. Text it to the customer — they tap once, pay with Apple Pay, Google Pay, or a card, and the job flips to <span class="text-emerald-300">Paid</span> automatically, firing the review text and accounting sync. The money settles in your Stripe account, never anyone else's.</p>
     </div>
   </div>
 </AppShell>

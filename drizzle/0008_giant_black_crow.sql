@@ -1,0 +1,1 @@
+ALTER TABLE `tenants` ADD `stripe_charges_enabled` integer DEFAULT false NOT NULL;

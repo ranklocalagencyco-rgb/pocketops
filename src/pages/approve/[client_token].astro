@@ -14,7 +14,7 @@ import { and, asc, eq } from 'drizzle-orm';
 import { createDb } from '../../db';
 import { customers, jobLineItems, jobs, payments, signatures, tenantDocuments, tenants } from '../../db/schema';
 import { cisDeductionCents, fmtDateTz, fmtMoney, parseMoney } from '../../lib/jobs';
-import { getStripe } from '../../lib/stripe';
+import { getStripe, platformFeeCents } from '../../lib/stripe';
 
 const token = Astro.params.client_token ?? '';
 if (token.length < 21) return new Response('Not found', { status: 404 });
@@ -54,6 +54,10 @@ const credentials = await db
   .where(and(eq(tenantDocuments.tenantId, job.tenantId), eq(tenantDocuments.showOnPortal, true)));
 
 const stripe = getStripe(env);
+// Stripe Connect: charges are created ON the business's own account, so the
+// money settles with them. No connected account = no online payments.
+const stripeAccount =
+  tenant?.stripeAccountId && tenant.stripeChargesEnabled ? tenant.stripeAccountId : null;
 const currency = tenant?.currency;
 const money = (c: number) => fmtMoney(c, currency);
 const origin = env.APP_URL || Astro.url.origin;
@@ -73,7 +77,7 @@ const payable = job.status === 'invoiced';
 const isPaid = job.status === 'paid';
 const balanceCents = Math.max(0, job.totalCents - cisCents - paidSoFarCents);
 const depositCents = Math.round((job.totalCents * (tenant?.depositRateBps ?? 0)) / 10_000);
-const depositViaStripe = Boolean(stripe) && depositCents >= 50;
+const depositViaStripe = Boolean(stripe) && Boolean(stripeAccount) && depositCents >= 50;
 
 let formError = '';
 if (Astro.request.method === 'POST') {
@@ -84,24 +88,29 @@ if (Astro.request.method === 'POST') {
     const acceptName = String(form.get('acceptName') ?? '').trim().slice(0, 80);
     if (!acceptName) {
       formError = 'Please enter your name to accept the quote.';
-    } else if (depositViaStripe && stripe) {
+    } else if (depositViaStripe && stripe && stripeAccount) {
       try {
-        const session = await stripe.checkout.sessions.create({
-          mode: 'payment',
-          line_items: [
-            {
-              price_data: {
-                currency: currency ?? 'gbp',
-                product_data: { name: `Deposit — ${tenant?.name}: ${job.title}` },
-                unit_amount: depositCents,
+        const fee = platformFeeCents(env, depositCents);
+        const session = await stripe.checkout.sessions.create(
+          {
+            mode: 'payment',
+            line_items: [
+              {
+                price_data: {
+                  currency: currency ?? 'gbp',
+                  product_data: { name: `Deposit — ${tenant?.name}: ${job.title}` },
+                  unit_amount: depositCents,
+                },
+                quantity: 1,
               },
-              quantity: 1,
-            },
-          ],
-          success_url: `${origin}/approve/${token}?accepted=1`,
-          cancel_url: `${origin}/approve/${token}`,
-          metadata: { jobId: job.id, tenantId: job.tenantId, type: 'deposit', acceptName },
-        });
+            ],
+            ...(fee > 0 ? { payment_intent_data: { application_fee_amount: fee } } : {}),
+            success_url: `${origin}/approve/${token}?accepted=1`,
+            cancel_url: `${origin}/approve/${token}`,
+            metadata: { jobId: job.id, tenantId: job.tenantId, type: 'deposit', acceptName },
+          },
+          { stripeAccount },
+        );
         if (session.url) return Astro.redirect(session.url, 303);
         formError = 'Could not start the deposit payment. Please try again.';
       } catch {
@@ -118,28 +127,33 @@ if (Astro.request.method === 'POST') {
     // Staged payments: pay the full balance or a part-payment of choice
     const requested = parseMoney(form.get('amount'));
     const chargeCents = Math.min(requested && requested >= 50 ? requested : balanceCents, balanceCents);
-    if (!stripe) {
+    if (!stripe || !stripeAccount) {
       formError = 'Online payment is not available yet — contact us to pay.';
     } else if (chargeCents < 50) {
       formError = 'This balance is below the card-payment minimum.';
     } else {
       try {
-        const session = await stripe.checkout.sessions.create({
-          mode: 'payment',
-          line_items: [
-            {
-              price_data: {
-                currency: currency ?? 'gbp',
-                product_data: { name: `${tenant?.name ?? 'Invoice'} — ${job.title}` },
-                unit_amount: chargeCents,
+        const fee = platformFeeCents(env, chargeCents);
+        const session = await stripe.checkout.sessions.create(
+          {
+            mode: 'payment',
+            line_items: [
+              {
+                price_data: {
+                  currency: currency ?? 'gbp',
+                  product_data: { name: `${tenant?.name ?? 'Invoice'} — ${job.title}` },
+                  unit_amount: chargeCents,
+                },
+                quantity: 1,
               },
-              quantity: 1,
-            },
-          ],
-          success_url: `${origin}/approve/${token}?paid=1`,
-          cancel_url: `${origin}/approve/${token}`,
-          metadata: { jobId: job.id, tenantId: job.tenantId, type: 'balance' },
-        });
+            ],
+            ...(fee > 0 ? { payment_intent_data: { application_fee_amount: fee } } : {}),
+            success_url: `${origin}/approve/${token}?paid=1`,
+            cancel_url: `${origin}/approve/${token}`,
+            metadata: { jobId: job.id, tenantId: job.tenantId, type: 'balance' },
+          },
+          { stripeAccount },
+        );
         if (session.url) return Astro.redirect(session.url, 303);
         formError = 'Could not start checkout. Please try again.';
       } catch {
@@ -273,7 +287,7 @@ const heading = isQuote ? 'Quote' : 'Invoice';
         </div>
       )}
 
-      {payable && !justPaid && (
+      {payable && !justPaid && stripe && stripeAccount && (
         <div class="fixed inset-x-0 bottom-0 border-t border-zinc-200 bg-white/95 p-4 backdrop-blur">
           <form method="POST" class="mx-auto max-w-lg">
             <input type="hidden" name="intent" value="pay" />
@@ -286,6 +300,14 @@ const heading = isQuote ? 'Quote' : 'Invoice';
               <span> Pay · Google Pay · Card</span>
             </div>
           </form>
+        </div>
+      )}
+
+      {payable && !justPaid && !(stripe && stripeAccount) && (
+        <div class="fixed inset-x-0 bottom-0 border-t border-zinc-200 bg-white/95 p-4 text-center backdrop-blur">
+          <p class="mx-auto max-w-lg text-sm text-zinc-600">
+            To pay this invoice, contact {tenant?.name}{tenant?.phone ? ` on ${tenant.phone}` : ''}.
+          </p>
         </div>
       )}
     </main>

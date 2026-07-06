@@ -44,7 +44,12 @@ export const tenants = sqliteTable('tenants', {
   plan: text('plan', { enum: ['trial', 'solo', 'crew', 'company'] })
     .notNull()
     .default('trial'),
+  // Stripe Connect (Standard) — payments settle in the tenant's own Stripe
+  // account; chargesEnabled mirrors account.charges_enabled after onboarding
   stripeAccountId: text('stripe_account_id'),
+  stripeChargesEnabled: integer('stripe_charges_enabled', { mode: 'boolean' })
+    .notNull()
+    .default(false),
   // E.164 Twilio number — inbound voice webhooks map `To` → tenant (Module 7)
   twilioNumber: text('twilio_number').unique(),
   // Google/Yelp review URL sent after payment (Module 8)

@@ -31,7 +31,8 @@ const emailCount = isAdmin
 const automationsCount = isAdmin
   ? (await db.select({ id: jobs.id }).from(jobs).where(tenantWhere(jobs, tenantId, isNotNull(jobs.recurrenceMonths)))).length
   : 0;
-const stripeCount = (env.STRIPE_SECRET_KEY ? 1 : 0) + (env.STRIPE_WEBHOOK_SECRET ? 1 : 0);
+// Connect status: 1 = account created, 2 = onboarding done, charges live
+const stripeCount = (tenant?.stripeAccountId ? 1 : 0) + (tenant?.stripeChargesEnabled ? 1 : 0);
 const messagingCount =
   (twilioConfigured(env) ? 1 : 0) + (tenant?.twilioNumber ? 1 : 0) + (tenant?.missedCallMessage ? 1 : 0);
 const reviewsCount = (tenant?.reviewLinkUrl ? 1 : 0) + (tenant?.reviewMessage ? 1 : 0);
@@ -51,7 +52,7 @@ const cards = [
   { href: '/dashboard/settings/messaging', title: 'Messaging', desc: 'Missed-call text-back number and message.', count: messagingCount },
   { href: '/dashboard/settings/email', title: 'Email', desc: 'Gmail or Outlook — customer emails join inbox threads.', count: emailCount },
   { href: '/dashboard/settings/reviews', title: 'Reviews', desc: 'Review link and the SMS sent after payment.', count: reviewsCount },
-  { href: '/dashboard/settings/payments', title: 'Payments', desc: 'Stripe Checkout, Apple Pay, and Google Pay status.', count: stripeCount },
+  { href: '/dashboard/settings/payments', title: 'Payments', desc: 'Connect Stripe — invoices paid straight to your bank.', count: stripeCount },
   { href: '/dashboard/settings/accounting', title: 'Accounting Sync', desc: 'QuickBooks or Xero connections and sync history.', count: connCount },
   { href: '/dashboard/settings/automations', title: 'Automations', desc: 'Invoice chasing and recurring service reminders.', count: automationsCount },
 ];

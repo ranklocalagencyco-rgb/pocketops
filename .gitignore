@@ -5,3 +5,6 @@ dist/
 .dev.vars
 .env
 .env.*
+
+# Claude Code local tooling
+.claude/

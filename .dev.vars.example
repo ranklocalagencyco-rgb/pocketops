@@ -8,9 +8,16 @@ APP_URL="http://localhost:4321"
 # then hit the endpoint daily from a Cloudflare Worker cron or uptime service.
 CRON_SECRET=""
 
-# Module 6 — Stripe Checkout + webhook
+# Module 6 — Stripe Connect (platform account key, sk_...). Tenants connect
+# their own Standard accounts in Settings → Payments; charges are created on
+# THEIR account, so money never touches the platform.
 STRIPE_SECRET_KEY=""
+# Webhook endpoint must be a CONNECT endpoint: Stripe dashboard → Webhooks →
+# Add endpoint → "Listen to events on Connected accounts" →
+# checkout.session.completed → paste its signing secret here.
 STRIPE_WEBHOOK_SECRET=""
+# Optional platform fee on each payment, in basis points (100 = 1%). Empty/0 = none.
+PLATFORM_FEE_BPS=""
 
 # Module 7/8 — Twilio missed-call text-back + review SMS
 TWILIO_ACCOUNT_SID=""

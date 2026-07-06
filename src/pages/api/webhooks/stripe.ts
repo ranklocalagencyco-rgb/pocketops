@@ -11,7 +11,7 @@ import type { APIRoute } from 'astro';
 import Stripe from 'stripe';
 import { eq } from 'drizzle-orm';
 import { createDb, tenantValues, tenantWhere } from '../../../db';
-import { jobLineItems, jobs, payments } from '../../../db/schema';
+import { jobLineItems, jobs, payments, tenants } from '../../../db/schema';
 import { newId } from '../../../lib/ids';
 import { cisDeductionCents } from '../../../lib/jobs';
 import { handleJobPaid } from '../../../lib/post-payment';
@@ -46,6 +46,23 @@ export const POST: APIRoute = async ({ request }) => {
     const tenantId = session.metadata?.tenantId;
     if (jobId && tenantId && session.payment_status === 'paid') {
       const db = createDb(env.DB);
+
+      // Connect events name the account they fired on — it must be the
+      // account of the tenant in the metadata, or one connected account
+      // could flip another tenant's jobs to paid with forged metadata.
+      if (event.account) {
+        const [tenant] = await db
+          .select({ stripeAccountId: tenants.stripeAccountId })
+          .from(tenants)
+          .where(eq(tenants.id, tenantId))
+          .limit(1);
+        if (!tenant || tenant.stripeAccountId !== event.account) {
+          return new Response(JSON.stringify({ received: true }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+      }
+
       const [job] = await db
         .select()
         .from(jobs)
