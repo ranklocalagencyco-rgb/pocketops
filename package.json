@@ -9,7 +9,8 @@
     "preview": "wrangler dev",
     "db:generate": "drizzle-kit generate",
     "db:apply:local": "wrangler d1 migrations apply pocketops-db-eu --local",
-    "db:apply:remote": "wrangler d1 migrations apply pocketops-db-eu --remote"
+    "db:apply:remote": "wrangler d1 migrations apply pocketops-db-eu --remote",
+    "db:backup": "node scripts/backup-db.mjs"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.1.1",

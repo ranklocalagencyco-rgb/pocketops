@@ -1,5 +1,6 @@
 /** Generic certificate PDF renderer — used by the app and the client hub. */
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { env } from 'cloudflare:workers';
 import type { certificates, customers, tenants } from '../db/schema';
 import { CERT_DEFS } from './certs';
 import { fmtDateTz } from './jobs';
@@ -36,29 +37,67 @@ export async function renderCertPdf(
   const page = pdf.addPage([595, 842]);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+
+  // Company logo (best-effort — a missing/corrupt image never blocks the PDF)
+  let logoImg = null;
+  let logoW = 0;
+  let logoH = 0;
+  if (tenant?.logoR2Key) {
+    try {
+      const obj = await env.FILES.get(tenant.logoR2Key);
+      if (obj) {
+        const bytes = new Uint8Array(await obj.arrayBuffer());
+        logoImg =
+          tenant.logoContentType === 'image/jpeg'
+            ? await pdf.embedJpg(bytes)
+            : await pdf.embedPng(bytes);
+        const scale = Math.min(46 / logoImg.height, 150 / logoImg.width, 1);
+        logoW = logoImg.width * scale;
+        logoH = logoImg.height * scale;
+      }
+    } catch {
+      logoImg = null;
+    }
+  }
+
   const ink = rgb(0.1, 0.09, 0.08);
   const grey = rgb(0.45, 0.42, 0.4);
   const copper = rgb(0.91, 0.45, 0.1);
   let y = 790;
   const text = (s: string, x: number, size = 10, f = font, color = ink) =>
     page.drawText(s, { x, y, size, font: f, color });
+  const right = (s: string, size = 10, f = font, color = ink) =>
+    page.drawText(s, { x: 545 - f.widthOfTextAtSize(s, size), y, size, font: f, color });
 
   text(def.title.toUpperCase(), 50, 16, bold, copper);
   y -= 16;
   text(`Certificate no. ${cert.certNumber} · Issued ${fmtDateTz(cert.issuedAt, tenant?.timezone)}`, 50, 9, font, grey);
 
-  y -= 28;
-  text(tenant?.name ?? '', 50, 12, bold);
-  y -= 13;
-  for (const l of [tenant?.phone, tenant?.email, tenant?.vatNumber ? `VAT No. ${tenant.vatNumber}` : null]) {
-    if (l) { text(l, 50, 9, font, grey); y -= 11; }
+  // Right-aligned tenant letterhead (matches the invoice/quote PDF)
+  if (logoImg) {
+    page.drawImage(logoImg, { x: 545 - logoW, y: 802 - logoH, width: logoW, height: logoH });
+    y = 802 - logoH - 14;
+  } else {
+    y = 790;
   }
-  if (cert.registrationNumber) {
-    text(`${def.regLabel} ${cert.registrationNumber}`, 50, 9, font, grey);
-    y -= 11;
+  right(tenant?.name ?? '', 12, bold);
+  y -= 13;
+  const cityLine = [tenant?.city, tenant?.region, tenant?.postalCode].filter(Boolean).join(', ');
+  for (const l of [
+    tenant?.addressLine1,
+    tenant?.addressLine2,
+    cityLine,
+    tenant?.phone,
+    tenant?.email,
+    tenant?.vatNumber ? `VAT No. ${tenant.vatNumber}` : null,
+    cert.registrationNumber
+      ? `${def.regLabel.replace(/\s*\(.*\)$/, '')} ${cert.registrationNumber}`
+      : null,
+  ]) {
+    if (l) { right(l, 9, font, grey); y -= 11; }
   }
 
-  y -= 10;
+  y = Math.min(y, 752) - 10;
   text('Site / customer', 50, 9, bold, grey);
   y -= 13;
   text(customer?.name ?? '', 50, 11, bold);
