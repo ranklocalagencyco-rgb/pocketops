@@ -39,6 +39,12 @@ Status as of 2026-07-06.
 
 ### External services (each lights its feature up when its secrets land)
 
+> **Note:** the OAuth client ids/secrets below are *developer app
+> registrations*, not accounts. Clients always connect their **own**
+> QuickBooks/Xero books, their **own** Gmail/Outlook mailbox, and their
+> **own** Stripe account — the platform just registers the app that makes
+> those connections possible.
+
 - [ ] **Stripe** — platform account, Connect profile, `STRIPE_SECRET_KEY`,
       Connect webhook + `STRIPE_WEBHOOK_SECRET`, optional `PLATFORM_FEE_BPS`
       → [05-payments-stripe-connect.md](05-payments-stripe-connect.md)
@@ -48,8 +54,12 @@ Status as of 2026-07-06.
       Gmail's restricted-scope verification review is required for production
       use by arbitrary users
 - [ ] **Microsoft Entra app** (Outlook inbox) — `MS_CLIENT_ID/SECRET`
-- [ ] **QuickBooks** — `QBO_CLIENT_ID/SECRET`, `QBO_ENVIRONMENT=production`
-- [ ] **Xero** — `XERO_CLIENT_ID/SECRET`
+- [ ] **QuickBooks** — free developer app at developer.intuit.com →
+      `QBO_CLIENT_ID/SECRET`, `QBO_ENVIRONMENT=production`. Each tenant then
+      connects their own QuickBooks company from Settings → Accounting.
+- [ ] **Xero** — free developer app at developer.xero.com →
+      `XERO_CLIENT_ID/SECRET`. Each tenant connects their own Xero
+      organisation from Settings → Accounting.
 
 ### Product / legal
 
