@@ -52,6 +52,9 @@ export const tenants = sqliteTable('tenants', {
     .default(false),
   // E.164 Twilio number — inbound voice webhooks map `To` → tenant (Module 7)
   twilioNumber: text('twilio_number').unique(),
+  // Handset the business number rings through to (E.164) — the CRM-controlled
+  // voice webhook <Dial>s this; for ported mobiles it's their NEW SIM number
+  twilioForwardNumber: text('twilio_forward_number'),
   // Google/Yelp review URL sent after payment (Module 8)
   reviewLinkUrl: text('review_link_url'),
   // VAT rate in basis points (2000 = 20% UK standard); applied on totals recompute
@@ -464,6 +467,39 @@ export const tenantDocuments = sqliteTable(
     index('tenant_docs_tenant_idx').on(t.tenantId),
     uniqueIndex('tenant_docs_share_idx').on(t.shareToken),
   ],
+);
+
+// ---------------------------------------------------------------------------
+// Number porting — bring the business's existing published number into Twilio
+// so nothing on their van/Checkatrade/GBP changes. The port itself is executed
+// by the platform owner in the Twilio console (LOA / PAC process); this table
+// captures the request and tracks its status for the tenant.
+// ---------------------------------------------------------------------------
+
+export const PORT_STATUSES = ['requested', 'submitted', 'scheduled', 'live', 'cancelled'] as const;
+export type PortStatus = (typeof PORT_STATUSES)[number];
+
+export const numberPortRequests = sqliteTable(
+  'number_port_requests',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    phoneNumber: text('phone_number').notNull(), // E.164, the number being ported in
+    numberType: text('number_type', { enum: ['mobile', 'landline'] }).notNull(),
+    // Mobile ports need a PAC from the losing carrier; landlines need a recent
+    // bill + signed LOA instead
+    pacCode: text('pac_code'),
+    accountHolder: text('account_holder').notNull(), // name on the losing carrier's account
+    currentProvider: text('current_provider'),
+    status: text('status', { enum: PORT_STATUSES }).notNull().default('requested'),
+    portDate: integer('port_date', { mode: 'timestamp' }), // set once the carrier schedules it
+    notes: text('notes'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('port_requests_tenant_idx').on(t.tenantId)],
 );
 
 // ---------------------------------------------------------------------------

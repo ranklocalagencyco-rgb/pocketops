@@ -1,9 +1,17 @@
 ---
+/**
+ * Messaging settings — the business line.
+ * Established trades PORT their existing published number into Twilio (van,
+ * Checkatrade, GBP listings all keep working); the CRM then routes every call
+ * to their handset and fires the missed-call text-back. This page captures
+ * the port request and manages routing.
+ */
 import { env } from 'cloudflare:workers';
-import { eq } from 'drizzle-orm';
+import { and, desc, eq, ne } from 'drizzle-orm';
 import AppShell from '../../../layouts/AppShell.astro';
-import { createDb } from '../../../db';
-import { tenants } from '../../../db/schema';
+import { createDb, tenantValues, tenantWhere } from '../../../db';
+import { numberPortRequests, tenants } from '../../../db/schema';
+import { newId } from '../../../lib/ids';
 import { canSeeFinancials } from '../../../lib/masking';
 import { twilioConfigured } from '../../../lib/twilio';
 
@@ -14,24 +22,87 @@ const db = createDb(env.DB);
 let notice = '';
 let error = '';
 if (Astro.request.method === 'POST') {
-  try {
-    const form = await Astro.request.formData();
+  const form = await Astro.request.formData();
+  const intent = String(form.get('intent') ?? 'settings');
+
+  if (intent === 'settings') {
+    try {
+      await db
+        .update(tenants)
+        .set({
+          twilioNumber: String(form.get('twilioNumber') ?? '').trim() || null,
+          twilioForwardNumber: String(form.get('twilioForwardNumber') ?? '').trim() || null,
+          missedCallMessage: String(form.get('missedCallMessage') ?? '').trim() || null,
+        })
+        .where(eq(tenants.id, tenantId));
+      notice = 'Messaging settings saved.';
+    } catch {
+      error = 'Could not save — that business number may already be in use by another workspace.';
+    }
+  } else if (intent === 'port') {
+    const phoneNumber = String(form.get('phoneNumber') ?? '').trim();
+    const numberType = String(form.get('numberType') ?? '') === 'landline' ? 'landline' : 'mobile';
+    const pacCode = String(form.get('pacCode') ?? '').trim().toUpperCase();
+    const accountHolder = String(form.get('accountHolder') ?? '').trim();
+    const currentProvider = String(form.get('currentProvider') ?? '').trim();
+    if (!phoneNumber || !accountHolder) {
+      error = 'Please fill in the number you want to bring over and the account holder name.';
+    } else if (numberType === 'mobile' && !pacCode) {
+      error = 'Mobile ports need a PAC code — text PAC to 65075 from that phone to get one free.';
+    } else {
+      await db.insert(numberPortRequests).values(
+        tenantValues(tenantId, {
+          id: newId(),
+          phoneNumber,
+          numberType,
+          pacCode: pacCode || null,
+          accountHolder,
+          currentProvider: currentProvider || null,
+          status: 'requested',
+        }),
+      );
+      notice = 'Port request received — we’ll take it from here and keep you posted below.';
+    }
+  } else if (intent === 'cancel-port') {
+    const portId = String(form.get('portId') ?? '');
     await db
-      .update(tenants)
-      .set({
-        twilioNumber: String(form.get('twilioNumber') ?? '').trim() || null,
-        missedCallMessage: String(form.get('missedCallMessage') ?? '').trim() || null,
-      })
-      .where(eq(tenants.id, tenantId));
-    notice = 'Messaging settings saved.';
-  } catch {
-    error = 'Could not save — that Twilio number may already be in use by another workspace.';
+      .update(numberPortRequests)
+      .set({ status: 'cancelled', updatedAt: new Date() })
+      .where(
+        tenantWhere(
+          numberPortRequests,
+          tenantId,
+          and(eq(numberPortRequests.id, portId), eq(numberPortRequests.status, 'requested')),
+        ),
+      );
+    notice = 'Port request cancelled.';
   }
 }
 
 const [tenant] = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+const [activePort] = await db
+  .select()
+  .from(numberPortRequests)
+  .where(
+    tenantWhere(
+      numberPortRequests,
+      tenantId,
+      and(ne(numberPortRequests.status, 'cancelled'), ne(numberPortRequests.status, 'live')),
+    ),
+  )
+  .orderBy(desc(numberPortRequests.createdAt))
+  .limit(1);
+
 const twilioReady = twilioConfigured(env);
-const webhookUrl = `${env.APP_URL || Astro.url.origin}/api/webhooks/twilio`;
+const base = env.APP_URL || Astro.url.origin;
+
+const PORT_STEPS = [
+  { key: 'requested', label: 'Requested', desc: 'We’ve got your details' },
+  { key: 'submitted', label: 'Submitted', desc: 'Filed with the carrier' },
+  { key: 'scheduled', label: 'Scheduled', desc: 'Port date confirmed' },
+  { key: 'live', label: 'Live', desc: 'Number running through Pocket Ops' },
+];
+const stepIndex = activePort ? PORT_STEPS.findIndex((s) => s.key === activePort.status) : -1;
 ---
 
 <AppShell title="Messaging" active="settings">
@@ -39,19 +110,103 @@ const webhookUrl = `${env.APP_URL || Astro.url.origin}/api/webhooks/twilio`;
     <div>
       <a href="/dashboard/settings" class="text-sm text-stone-400 hover:text-stone-200">← Settings</a>
       <h2 class="mt-1 text-2xl font-bold">Messaging</h2>
-      <p class="text-sm text-stone-400">Missed calls get an instant text back so the lead never goes cold.</p>
+      <p class="text-sm text-stone-400">Your business line rings your phone as normal — and missed calls get an instant text back so the lead never goes cold.</p>
     </div>
     {notice && <p class="rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300">{notice}</p>}
     {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
 
+    {!activePort && !tenant?.twilioNumber && (
+      <div class="space-y-4 rounded-2xl border border-amber-800/60 bg-ink-900 p-5">
+        <div>
+          <p class="font-semibold">Bring your existing number with you</p>
+          <p class="mt-1 text-sm text-stone-400">
+            Keep the number that's already on your van, Checkatrade, and Google — we move it over so
+            nothing you've printed or listed ever changes. Calls still ring your phone; missed ones get
+            the instant text-back. Takes 1–4 weeks, and your number keeps working the whole time.
+          </p>
+        </div>
+        <form method="POST" class="space-y-4">
+          <input type="hidden" name="intent" value="port" />
+          <label class="block space-y-1">
+            <span class="text-sm text-stone-400">Number to bring over</span>
+            <input name="phoneNumber" required placeholder="07700 900123" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+          </label>
+          <label class="block space-y-1">
+            <span class="text-sm text-stone-400">Number type</span>
+            <select name="numberType" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none">
+              <option value="mobile">Mobile (07…)</option>
+              <option value="landline">Landline (01 / 02 / 03…)</option>
+            </select>
+          </label>
+          <label class="block space-y-1">
+            <span class="text-sm text-stone-400">PAC code (mobiles only)</span>
+            <input name="pacCode" placeholder="ABC123456" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base uppercase placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+            <span class="block text-xs text-stone-500">Text <span class="text-amber-300">PAC</span> to <span class="text-amber-300">65075</span> from that phone — it's free and arrives in a minute.</span>
+          </label>
+          <label class="block space-y-1">
+            <span class="text-sm text-stone-400">Name on the phone account</span>
+            <input name="accountHolder" required placeholder="e.g. John Smith / Smith Plumbing Ltd" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+          </label>
+          <label class="block space-y-1">
+            <span class="text-sm text-stone-400">Current provider (optional)</span>
+            <input name="currentProvider" placeholder="e.g. EE, O2, Vodafone, BT" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+          </label>
+          <div class="rounded-xl border border-ink-700 bg-ink-950 p-4 text-xs text-stone-400">
+            <p class="font-semibold text-stone-300">Porting a mobile? Read this first.</p>
+            <p class="mt-1">Your handset gets a fresh SIM with a new number, and your existing number becomes your business line: calls to it still ring your phone, but <span class="text-stone-200">texts to it arrive in your Pocket Ops inbox</span> instead of your messages app. That's ideal for a work number — but if this number is also your personal one (bank codes, family), consider a new business number instead.</p>
+          </div>
+          <button type="submit" class="w-full min-h-12 rounded-xl bg-gradient-to-r from-orange-700 via-orange-600 to-amber-500 font-semibold text-white active:scale-[0.99]">Start my number move</button>
+        </form>
+      </div>
+    )}
+
+    {activePort && (
+      <div class="space-y-4 rounded-2xl border border-ink-700 bg-ink-900 p-5">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="font-semibold">Moving {activePort.phoneNumber}</p>
+            <p class="text-sm text-stone-400">{activePort.numberType === 'mobile' ? 'Mobile port' : 'Landline port'} — your number keeps working throughout.</p>
+          </div>
+          {activePort.status === 'requested' && (
+            <form method="POST">
+              <input type="hidden" name="intent" value="cancel-port" />
+              <input type="hidden" name="portId" value={activePort.id} />
+              <button type="submit" class="min-h-10 rounded-lg border border-ink-600 px-3 text-xs text-stone-400 hover:text-stone-200">Cancel</button>
+            </form>
+          )}
+        </div>
+        <ol class="space-y-2">
+          {PORT_STEPS.map((s, i) => (
+            <li class={`flex items-center gap-3 rounded-xl border px-4 py-2.5 text-sm ${i <= stepIndex ? 'border-emerald-800 bg-emerald-950/40' : 'border-ink-700 bg-ink-950'}`}>
+              <span class={i <= stepIndex ? 'text-emerald-400' : 'text-stone-600'}>{i <= stepIndex ? '✓' : '○'}</span>
+              <span class={`font-medium ${i <= stepIndex ? 'text-emerald-300' : 'text-stone-400'}`}>{s.label}</span>
+              <span class="text-xs text-stone-500">{s.desc}</span>
+              {s.key === 'scheduled' && activePort.portDate && (
+                <span class="ml-auto text-xs text-amber-300">{activePort.portDate.toLocaleDateString('en-GB')}</span>
+              )}
+            </li>
+          ))}
+        </ol>
+        {activePort.notes && <p class="text-xs text-stone-500">{activePort.notes}</p>}
+      </div>
+    )}
+
     <p class={`rounded-xl border px-4 py-3 text-sm ${twilioReady ? 'border-emerald-800 bg-emerald-950 text-emerald-300' : 'border-ink-700 bg-ink-900 text-stone-400'}`}>
-      {twilioReady ? '● Twilio connected' : '○ Twilio not connected — set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in your Cloudflare secrets.'}
+      {twilioReady ? '● Phone system connected' : '○ Phone system not live on this installation yet.'}
     </p>
 
     <form method="POST" class="space-y-4 rounded-2xl border border-ink-700 bg-ink-900 p-5">
+      <input type="hidden" name="intent" value="settings" />
+      <p class="font-semibold">Call routing</p>
       <label class="block space-y-1">
-        <span class="text-sm text-stone-400">Your Twilio number (E.164)</span>
+        <span class="text-sm text-stone-400">Business number (E.164)</span>
         <input name="twilioNumber" value={tenant?.twilioNumber ?? ''} placeholder="+447700900123" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+        <span class="block text-xs text-stone-500">Filled in automatically once your ported number goes live.</span>
+      </label>
+      <label class="block space-y-1">
+        <span class="text-sm text-stone-400">Ring through to (your handset)</span>
+        <input name="twilioForwardNumber" value={tenant?.twilioForwardNumber ?? ''} placeholder="+447700900456" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+        <span class="block text-xs text-stone-500">Every call to your business number rings this phone. After a mobile port, this is your new SIM's number.</span>
       </label>
       <label class="block space-y-1">
         <span class="text-sm text-stone-400">Text-back message</span>
@@ -62,9 +217,10 @@ const webhookUrl = `${env.APP_URL || Astro.url.origin}/api/webhooks/twilio`;
     </form>
 
     <div class="rounded-2xl border border-ink-700 bg-ink-900 p-5 text-sm">
-      <p class="font-semibold">Twilio setup</p>
-      <p class="mt-1 text-stone-400">In your Twilio number's Voice settings, set the call status callback to:</p>
-      <input readonly value={webhookUrl} onclick="this.select()" class="mt-2 w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 font-mono text-xs text-amber-300" />
+      <p class="font-semibold">Number wiring (done for you)</p>
+      <p class="mt-1 text-stone-400">Once the number is in Twilio, its Voice URL and Messaging URL point here — calls route through the CRM and texts land in your inbox:</p>
+      <input readonly value={`${base}/api/webhooks/twilio-voice`} onclick="this.select()" class="mt-2 w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 font-mono text-xs text-amber-300" />
+      <input readonly value={`${base}/api/webhooks/twilio-sms`} onclick="this.select()" class="mt-2 w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 font-mono text-xs text-amber-300" />
     </div>
   </div>
 </AppShell>

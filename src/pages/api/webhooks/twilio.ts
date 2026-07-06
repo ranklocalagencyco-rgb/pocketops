@@ -1,7 +1,9 @@
 /**
  * Automated Missed-Call Text-Back (Module 7).
- * Point the Twilio number's voice status callback here. Signature-validated
- * so it can't be abused as a free SMS relay.
+ * Receives either the <Dial action> callback from /api/webhooks/twilio-voice
+ * (DialCallStatus — the routed-call flow) or a number's voice status callback
+ * (CallStatus — legacy direct setup). Signature-validated so it can't be
+ * abused as a free SMS relay.
  */
 import { env } from 'cloudflare:workers';
 import type { APIRoute } from 'astro';
@@ -11,7 +13,9 @@ import { callEvents, customers, tenants } from '../../../db/schema';
 import { newId } from '../../../lib/ids';
 import { sendSms, twilioConfigured, validateTwilioSignature } from '../../../lib/twilio';
 
-const MISSED_STATUSES = new Set(['no-answer', 'busy', 'failed']);
+// 'canceled' = the caller gave up while it was still ringing — exactly the
+// lead the text-back exists to save
+const MISSED_STATUSES = new Set(['no-answer', 'busy', 'failed', 'canceled']);
 
 const twiml = () =>
   new Response('<?xml version="1.0" encoding="UTF-8"?><Response/>', {
@@ -37,7 +41,10 @@ export const POST: APIRoute = async ({ request }) => {
   const callSid = params.CallSid;
   const from = params.From;
   const to = params.To;
-  const callStatus = (params.CallStatus ?? '').toLowerCase();
+  // DialCallStatus (dial-action flow) is the handset outcome; CallStatus alone
+  // means a legacy status-callback setup
+  const isDialAction = 'DialCallStatus' in params;
+  const callStatus = (params.DialCallStatus ?? params.CallStatus ?? '').toLowerCase();
   if (!callSid || !from || !to) return twiml();
 
   const db = createDb(env.DB);
@@ -85,6 +92,14 @@ export const POST: APIRoute = async ({ request }) => {
         .update(callEvents)
         .set({ textBackSentAt: new Date() })
         .where(tenantWhere(callEvents, tenantId, eq(callEvents.twilioCallSid, callSid)));
+    }
+    // Dial-action responses play to the still-connected caller — tell them
+    // help is already on its way before hanging up
+    if (isDialAction) {
+      return new Response(
+        '<?xml version="1.0" encoding="UTF-8"?><Response><Say language="en-GB">Sorry, we could not get to the phone. We have just sent you a text — reply there and we will get straight back to you.</Say></Response>',
+        { headers: { 'Content-Type': 'text/xml' } },
+      );
     }
   }
 
