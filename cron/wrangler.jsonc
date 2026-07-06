@@ -5,8 +5,9 @@
   "compatibility_date": "2026-06-01",
   "triggers": {
     // 09:00 UTC = 10am UK in summer, 9am in winter — inside default quiet
-    // hours (08:00–20:00) so gated texts actually send on the daily run
-    "crons": ["0 9 * * *"]
+    // hours (08:00–20:00) so gated texts actually send on the daily run.
+    // 17:00 UTC = 6pm UK summer / 5pm winter — the "tomorrow's jobs" digest.
+    "crons": ["0 9 * * *", "0 17 * * *"]
   },
   "vars": {
     // Update to https://pocketops.io when the custom domain lands

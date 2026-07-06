@@ -58,9 +58,10 @@ const [me] = await db
   .limit(1);
 const profileCount = [me?.name, me?.phone, me?.avatarR2Key].filter(Boolean).length;
 const guidesCount = (await getCollection('help')).length;
+// Admins see company-wide enabled devices; field roles see their own
 const pushCount = isAdmin
   ? (await db.select({ id: pushSubscriptions.id }).from(pushSubscriptions).where(tenantWhere(pushSubscriptions, tenantId))).length
-  : 0;
+  : (await db.select({ id: pushSubscriptions.id }).from(pushSubscriptions).where(tenantWhere(pushSubscriptions, tenantId, eq(pushSubscriptions.userId, Astro.locals.userId!)))).length;
 const regionalCount =
   (tenant?.timezone ? 1 : 0) +
   (tenant?.currency ? 1 : 0) +
@@ -102,7 +103,7 @@ const cards = [
       </p>
     )}
     <div class="grid gap-3 md:grid-cols-2">
-      {(isAdmin ? cards : cards.slice(0, 2)).map((c) => (
+      {cards.filter((c) => isAdmin || ['My profile', 'Help & guides', 'Notifications'].includes(c.title)).map((c) => (
           <a href={c.href} class="flex min-h-16 items-center justify-between gap-4 rounded-2xl border border-edge bg-card px-5 py-4 transition-colors hover:border-accent/60">
             <span>
               <span class="block font-bold">{c.title}</span>

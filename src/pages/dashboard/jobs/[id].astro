@@ -25,6 +25,7 @@ import { newId } from '../../../lib/ids';
 import { canTransition, cisDeductionCents, fmtDateTz, fmtMoney, parseMoney, recomputeTotals, STATUS_LABELS, TRANSITIONS } from '../../../lib/jobs';
 import { canSeeFinancials } from '../../../lib/masking';
 import { sendAndLogSms } from '../../../lib/messages';
+import { notifyUser } from '../../../lib/notify';
 import { handleJobPaid } from '../../../lib/post-payment';
 import { clientIp } from '../../../lib/request';
 import { twilioConfigured } from '../../../lib/twilio';
@@ -163,6 +164,21 @@ if (Astro.request.method === 'POST') {
         .update(jobs)
         .set({ assignedUserId, updatedAt: new Date() })
         .where(tenantWhere(jobs, tenantId, eq(jobs.id, jobId)));
+      // Tell the tech they've got work — unless it's a re-save of the same
+      // person or someone assigning a job to themselves
+      if (assignedUserId && assignedUserId !== job.assignedUserId && assignedUserId !== Astro.locals.userId) {
+        const [tz] = await db
+          .select({ timezone: tenants.timezone })
+          .from(tenants)
+          .where(eq(tenants.id, tenantId))
+          .limit(1);
+        await notifyUser(db, tenantId, assignedUserId, 'jobAssigned', {
+          title: 'New job for you',
+          body: `"${job.title}"${job.scheduledAt ? ` — ${fmtDateTz(job.scheduledAt, tz?.timezone ?? 'Europe/London')}` : ''}`,
+          url: `/dashboard/jobs/${jobId}`,
+          tag: `assign-${jobId}`,
+        });
+      }
     } else if (intent === 'reschedule') {
       const raw = String(form.get('scheduledAt') ?? '');
       await db

@@ -1,8 +1,9 @@
 ---
 /**
  * Push notifications — enable this device, choose which events buzz the
- * phone, send a test. Owner/admin only: every launch category (missed
- * calls, messages, quotes, payments, leads) is business-level signal.
+ * phone, send a test. Every role gets a page: owners/admins see the full
+ * business categories, field roles see the two that are theirs (job
+ * assigned, tomorrow's jobs) — same visibility split as the app.
  */
 import { env } from 'cloudflare:workers';
 import { eq } from 'drizzle-orm';
@@ -12,11 +13,26 @@ import { pushSubscriptions, users } from '../../../db/schema';
 import { canSeeFinancials } from '../../../lib/masking';
 import { pushConfigured, sendWebPush } from '../../../lib/webpush';
 
-if (!canSeeFinancials(Astro.locals.userRole!)) return Astro.redirect('/dashboard/settings');
 const tenantId = Astro.locals.tenantId!;
 const userId = Astro.locals.userId!;
+const isAdmin = canSeeFinancials(Astro.locals.userRole!);
 const db = createDb(env.DB);
 const configured = pushConfigured(env);
+
+// name = form field, column = users.* column. adminOnly categories are
+// neither shown to nor saved for field roles.
+const CATEGORY_META = [
+  { name: 'missedCall', column: 'notifyMissedCall', adminOnly: true, label: 'Missed calls', desc: 'Someone rang your business number and the text-back went out.' },
+  { name: 'newMessage', column: 'notifyNewMessage', adminOnly: true, label: 'New messages', desc: 'A customer texted or emailed — reply from the inbox.' },
+  { name: 'quoteAccepted', column: 'notifyQuoteAccepted', adminOnly: true, label: 'Quote accepted', desc: 'A customer accepted a quote (and paid a deposit if you take them).' },
+  { name: 'payment', column: 'notifyPayment', adminOnly: true, label: 'Payments', desc: 'Money landed — card payments through invoice links.' },
+  { name: 'newLead', column: 'notifyNewLead', adminOnly: true, label: 'New leads', desc: 'An enquiry arrived through your booking page.' },
+  { name: 'jobAssigned', column: 'notifyJobAssigned', adminOnly: false, label: 'Job assigned to you', desc: 'You’ve been given a job — see it before you’re asked about it.' },
+  { name: 'tomorrowDigest', column: 'notifyTomorrowDigest', adminOnly: false, label: 'Tomorrow’s jobs, tonight', desc: 'One evening summary of tomorrow’s diary — never one push per job.' },
+  { name: 'invoiceChased', column: 'notifyInvoiceChased', adminOnly: true, label: 'Invoice chased', desc: 'The automatic reminder went out for an overdue invoice.' },
+  { name: 'staleLeads', column: 'notifyStaleLeads', adminOnly: true, label: 'Leads going cold', desc: 'A Monday nudge when quotes haven’t moved in 5+ days.' },
+] as const;
+const visibleMeta = CATEGORY_META.filter((c) => isAdmin || !c.adminOnly);
 
 let notice = '';
 let error = '';
@@ -25,15 +41,13 @@ if (Astro.request.method === 'POST') {
     const form = await Astro.request.formData();
     const intent = String(form.get('intent') ?? '');
     if (intent === 'prefs') {
+      // Only touch the categories this role can see — a tech saving their
+      // two toggles must not silently reset admin categories to off
+      const updates: Record<string, boolean> = {};
+      for (const c of visibleMeta) updates[c.column] = form.get(c.name) === 'on';
       await db
         .update(users)
-        .set({
-          notifyMissedCall: form.get('missedCall') === 'on',
-          notifyNewMessage: form.get('newMessage') === 'on',
-          notifyQuoteAccepted: form.get('quoteAccepted') === 'on',
-          notifyPayment: form.get('payment') === 'on',
-          notifyNewLead: form.get('newLead') === 'on',
-        })
+        .set(updates)
         .where(tenantWhere(users, tenantId, eq(users.id, userId)));
       notice = 'Notification preferences saved.';
     } else if (intent === 'test') {
@@ -81,13 +95,12 @@ const myDevices = (
     .where(tenantWhere(pushSubscriptions, tenantId, eq(pushSubscriptions.userId, userId)))
 ).length;
 
-const categories = [
-  { name: 'missedCall', label: 'Missed calls', desc: 'Someone rang your business number and the text-back went out.', on: me?.notifyMissedCall },
-  { name: 'newMessage', label: 'New messages', desc: 'A customer texted or emailed — reply from the inbox.', on: me?.notifyNewMessage },
-  { name: 'quoteAccepted', label: 'Quote accepted', desc: 'A customer accepted a quote (and paid a deposit if you take them).', on: me?.notifyQuoteAccepted },
-  { name: 'payment', label: 'Payments', desc: 'Money landed — card payments through invoice links.', on: me?.notifyPayment },
-  { name: 'newLead', label: 'New leads', desc: 'An enquiry arrived through your booking page.', on: me?.notifyNewLead },
-];
+const categories = visibleMeta.map((c) => ({
+  name: c.name,
+  label: c.label,
+  desc: c.desc,
+  on: Boolean(me?.[c.column]),
+}));
 ---
 
 <AppShell title="Notifications" active="settings">
@@ -137,7 +150,7 @@ const categories = [
             </label>
           ))}
           <button type="submit" class="w-full min-h-12 rounded-xl bg-primary font-semibold text-white hover:bg-primary-2">Save preferences</button>
-          <p class="text-xs text-faint">These apply to all your devices. Notifications go to owners and admins only.</p>
+          <p class="text-xs text-faint">These apply to all your devices. Business and money alerts go to owners and admins only; job assignments and the evening digest go to the person they're for.</p>
         </form>
       </>
     )}
