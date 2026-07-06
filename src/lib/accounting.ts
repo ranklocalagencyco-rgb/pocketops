@@ -118,6 +118,33 @@ async function refreshAccessToken(
   return (await res.json()) as TokenResponse;
 }
 
+/**
+ * Revoke tokens with the provider on disconnect — required by both Intuit's
+ * production review and Xero certification. Best-effort: local status flips
+ * to revoked regardless.
+ */
+export async function revokeTokens(
+  provider: Provider,
+  env: Env,
+  refreshToken: string,
+): Promise<void> {
+  const cfg = PROVIDERS[provider];
+  const basic = btoa(`${cfg.clientId(env)}:${cfg.clientSecret(env)}`);
+  if (provider === 'quickbooks') {
+    await fetch('https://developer.api.intuit.com/v2/oauth2/tokens/revoke', {
+      method: 'POST',
+      headers: { Authorization: `Basic ${basic}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: refreshToken }),
+    });
+  } else {
+    await fetch('https://identity.xero.com/connect/revocation', {
+      method: 'POST',
+      headers: { Authorization: `Basic ${basic}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ token: refreshToken, token_type_hint: 'refresh_token' }),
+    });
+  }
+}
+
 /** Xero's post-auth "which org did they connect" lookup. */
 export async function fetchXeroTenantId(accessToken: string): Promise<string | null> {
   const res = await fetch('https://api.xero.com/connections', {

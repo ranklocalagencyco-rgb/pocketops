@@ -45,6 +45,7 @@ const providers = [
   connection: connections.find((c) => c.provider === p.id),
 }));
 const connectedFlash = Astro.url.searchParams.get('connected');
+const disconnectedFlash = Astro.url.searchParams.get('disconnected');
 ---
 
 <AppShell title="Accounting Sync" active="settings">
@@ -55,6 +56,7 @@ const connectedFlash = Astro.url.searchParams.get('connected');
       <p class="text-sm text-stone-400">Paid invoices push into your ledger automatically.</p>
     </div>
     {connectedFlash && <p class="rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300">{connectedFlash} connected.</p>}
+    {disconnectedFlash && <p class="rounded-lg border border-ink-700 bg-ink-900 px-4 py-3 text-sm text-stone-300">{disconnectedFlash} disconnected — its access has been revoked.</p>}
 
     <div class="space-y-2">
       {providers.map((p) => (
@@ -72,7 +74,14 @@ const connectedFlash = Astro.url.searchParams.get('connected');
           {p.configured && p.connection?.status !== 'active' && (
             <a href={`/api/integrations/${p.id}/connect`} class="flex min-h-12 items-center rounded-xl border border-amber-500 px-4 text-sm font-semibold text-amber-400 hover:bg-amber-950">Connect</a>
           )}
-          {p.connection?.status === 'active' && <span class="text-emerald-400">●</span>}
+          {p.connection?.status === 'active' && (
+            <div class="flex items-center gap-3">
+              <span class="text-emerald-400">●</span>
+              <form method="POST" action={`/api/integrations/${p.id}/disconnect`}>
+                <button type="submit" class="flex min-h-10 items-center rounded-lg border border-ink-600 px-3 text-xs text-stone-400 hover:border-red-800 hover:text-red-300">Disconnect</button>
+              </form>
+            </div>
+          )}
         </div>
       ))}
     </div>
