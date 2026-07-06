@@ -19,11 +19,19 @@ const [me] = await db
   .where(eq(users.id, Astro.locals.userId!))
   .limit(1);
 const [tenant] = await db
-  .select({ name: tenants.name, timezone: tenants.timezone, currency: tenants.currency })
+  .select({
+    name: tenants.name,
+    timezone: tenants.timezone,
+    currency: tenants.currency,
+    slug: tenants.slug,
+    logoR2Key: tenants.logoR2Key,
+  })
   .from(tenants)
   .where(eq(tenants.id, tenantId))
   .limit(1);
 const tz = tenant?.timezone ?? 'America/New_York';
+// Company logo for the Today empty state (cache-busted by key, like Settings → Business)
+const logoSrc = tenant?.logoR2Key ? `/logo/${tenant.slug}?v=${tenant.logoR2Key.slice(-8)}` : null;
 
 const allJobs = await db
   .select({
@@ -246,7 +254,11 @@ const recent = allJobs.slice(0, 6);
         </div>
         {todaysJobs.length === 0 ? (
           <div class="flex flex-1 flex-col items-center justify-center gap-2 py-10 text-center">
-            <span class="flex h-12 w-12 items-center justify-center rounded-full bg-card-2 text-xl">⚡</span>
+            {logoSrc ? (
+              <img src={logoSrc} alt={tenant?.name} class="h-12 w-12 rounded-full bg-white object-contain p-1.5" />
+            ) : (
+              <span class="flex h-12 w-12 items-center justify-center rounded-full bg-card-2 text-xl">⚡</span>
+            )}
             <p class="text-sm text-dim">Nothing scheduled today.</p>
             <a href="/dashboard/jobs?status=scheduled" class="text-sm text-accent-text hover:underline">View scheduled →</a>
           </div>
