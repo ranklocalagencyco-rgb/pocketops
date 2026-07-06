@@ -1,5 +1,6 @@
 ---
 import { env } from 'cloudflare:workers';
+import { getCollection } from 'astro:content';
 import { eq, isNotNull } from 'drizzle-orm';
 import AppShell from '../../../layouts/AppShell.astro';
 import { createDb, tenantWhere } from '../../../db';
@@ -56,6 +57,7 @@ const [me] = await db
   .where(tenantWhere(users, tenantId, eq(users.id, Astro.locals.userId!)))
   .limit(1);
 const profileCount = [me?.name, me?.phone, me?.avatarR2Key].filter(Boolean).length;
+const guidesCount = (await getCollection('help')).length;
 const regionalCount =
   (tenant?.timezone ? 1 : 0) +
   (tenant?.currency ? 1 : 0) +
@@ -64,6 +66,7 @@ const regionalCount =
 
 const cards = [
   { href: '/dashboard/settings/profile', title: 'My profile', desc: 'Your name, mobile, and profile photo.', count: profileCount },
+  { href: '/dashboard/help', title: 'Help & guides', desc: 'Short guides to each part of the app.', count: guidesCount },
   { href: '/dashboard/settings/business', title: 'Business', desc: 'Company name and contact details on invoices.', count: businessCount },
   { href: '/dashboard/settings/regional', title: 'Regional & VAT', desc: 'Timezone, currency, VAT rate and registration number.', count: regionalCount },
   { href: '/dashboard/settings/team', title: 'Team', desc: 'Techs, admins, roles, and private hourly costs.', count: teamCount },
@@ -95,7 +98,7 @@ const cards = [
       </p>
     )}
     <div class="grid gap-3 md:grid-cols-2">
-      {(isAdmin ? cards : cards.slice(0, 1)).map((c) => (
+      {(isAdmin ? cards : cards.slice(0, 2)).map((c) => (
           <a href={c.href} class="flex min-h-16 items-center justify-between gap-4 rounded-2xl border border-edge bg-card px-5 py-4 transition-colors hover:border-accent/60">
             <span>
               <span class="block font-bold">{c.title}</span>

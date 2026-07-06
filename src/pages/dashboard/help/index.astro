@@ -1,0 +1,34 @@
+---
+/**
+ * Help & guides — index of the in-app guides (src/content/help). Available to
+ * every role; the topbar "?" deep-links to the guide for the current module.
+ */
+import { getCollection } from 'astro:content';
+import AppShell from '../../../layouts/AppShell.astro';
+
+const guides = (await getCollection('help')).sort((a, b) => a.data.order - b.data.order);
+---
+
+<AppShell title="Help & guides">
+  <div class="mx-auto max-w-xl space-y-5">
+    <div>
+      <p class="text-[11px] font-semibold uppercase tracking-widest text-faint">How Pocket Ops works</p>
+      <h2 class="mt-1 text-3xl font-bold">Help & guides</h2>
+      <p class="mt-1 text-sm text-dim">
+        Short guides to each part of the app. You can also tap the <span class="font-semibold">?</span> in the
+        top bar anywhere — it opens the guide for the screen you're on.
+      </p>
+    </div>
+    <div class="space-y-3">
+      {guides.map((g) => (
+        <a href={`/dashboard/help/${g.id}`} class="flex min-h-16 items-center justify-between gap-4 rounded-2xl border border-edge bg-card px-5 py-4 transition-colors hover:border-accent/60">
+          <span>
+            <span class="block font-bold">{g.data.title}</span>
+            <span class="mt-0.5 block text-sm text-dim">{g.data.summary}</span>
+          </span>
+          <span class="text-faint">→</span>
+        </a>
+      ))}
+    </div>
+  </div>
+</AppShell>

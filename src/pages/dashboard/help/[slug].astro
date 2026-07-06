@@ -1,0 +1,73 @@
+---
+/**
+ * A single in-app guide, rendered from the `help` content collection.
+ * Guides are static product documentation — no tenant data on this page.
+ */
+import { getEntry, render } from 'astro:content';
+import AppShell from '../../../layouts/AppShell.astro';
+
+const slug = Astro.params.slug ?? '';
+const entry = await getEntry('help', slug);
+if (!entry) return Astro.redirect('/dashboard/help');
+const { Content } = await render(entry);
+---
+
+<AppShell title={entry.data.title} active={entry.data.module}>
+  <div class="mx-auto max-w-xl space-y-5">
+    <div>
+      <a href="/dashboard/help" class="text-sm text-dim hover:text-body">← All guides</a>
+      <h2 class="mt-1 text-2xl font-bold">{entry.data.title}</h2>
+      <p class="text-sm text-dim">{entry.data.summary}</p>
+    </div>
+    <article class="help-prose rounded-2xl border border-edge bg-card p-5">
+      <Content />
+    </article>
+  </div>
+</AppShell>
+
+<style is:global>
+  /* Markdown output has no classes, so style rendered elements by tag,
+     scoped under .help-prose and using the theme's semantic tokens. */
+  .help-prose {
+    color: var(--color-body);
+    line-height: 1.65;
+  }
+  .help-prose h2 {
+    margin: 1.5rem 0 0.5rem;
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+  .help-prose h2:first-child {
+    margin-top: 0;
+  }
+  .help-prose p {
+    margin: 0.6rem 0;
+    font-size: 0.925rem;
+    color: var(--color-dim);
+  }
+  .help-prose strong {
+    color: var(--color-body);
+  }
+  .help-prose ul,
+  .help-prose ol {
+    margin: 0.6rem 0;
+    padding-left: 1.25rem;
+    font-size: 0.925rem;
+    color: var(--color-dim);
+  }
+  .help-prose ul {
+    list-style: disc;
+  }
+  .help-prose ol {
+    list-style: decimal;
+  }
+  .help-prose li {
+    margin: 0.35rem 0;
+  }
+  .help-prose code {
+    border-radius: 0.375rem;
+    background: var(--color-card-2);
+    padding: 0.1rem 0.35rem;
+    font-size: 0.85em;
+  }
+</style>
