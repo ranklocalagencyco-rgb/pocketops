@@ -123,6 +123,10 @@ export const users = sqliteTable(
     role: text('role', { enum: USER_ROLES }).notNull().default('technician'),
     hourlyCostCents: integer('hourly_cost_cents'), // SENSITIVE
     isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+    // Profile photo (Settings → My profile) — R2-backed like the tenant logo;
+    // content type is sniffed from magic bytes at upload, never trusted
+    avatarR2Key: text('avatar_r2_key'),
+    avatarContentType: text('avatar_content_type'),
     createdAt: createdAt(),
   },
   (t) => [index('users_tenant_idx').on(t.tenantId)],
@@ -429,28 +433,6 @@ export const smsTemplates = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [index('sms_templates_tenant_idx').on(t.tenantId)],
-);
-
-// Embeddable lead-capture forms (Settings → Web forms) — public by token,
-// submissions create a customer + lead job tagged with the form's source
-export const webForms = sqliteTable(
-  'web_forms',
-  {
-    id: text('id').primaryKey(),
-    tenantId: text('tenant_id')
-      .notNull()
-      .references(() => tenants.id),
-    name: text('name').notNull(),
-    token: text('token').notNull(),
-    intro: text('intro'),
-    sourceId: text('source_id').references(() => jobSources.id),
-    isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
-    createdAt: createdAt(),
-  },
-  (t) => [
-    index('web_forms_tenant_idx').on(t.tenantId),
-    uniqueIndex('web_forms_token_idx').on(t.token),
-  ],
 );
 
 // Connected Gmail / Outlook mailboxes (Settings → Email)

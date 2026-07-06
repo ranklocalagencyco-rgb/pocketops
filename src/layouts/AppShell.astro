@@ -15,10 +15,13 @@ const role = Astro.locals.userRole;
 
 const db = createDb(env.DB);
 const [me] = await db
-  .select({ name: users.name })
+  .select({ name: users.name, avatarR2Key: users.avatarR2Key })
   .from(users)
   .where(eq(users.id, Astro.locals.userId!))
   .limit(1);
+const avatarSrc = me?.avatarR2Key
+  ? `/api/app/avatar/${Astro.locals.userId}?v=${me.avatarR2Key.slice(-8)}`
+  : null;
 const [tenant] = await db
   .select({ name: tenants.name })
   .from(tenants)
@@ -99,11 +102,17 @@ const itemClass = (id: string) =>
       </nav>
       <div class="border-t border-shell-edge p-3">
         <div class="flex items-center gap-3 rounded-lg px-2 py-2">
-          <span class="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-xs font-bold text-white">{initials}</span>
-          <span class="min-w-0 flex-1">
-            <span class="block truncate text-sm font-medium text-white">{me?.name}</span>
-            <span class="block text-xs capitalize text-shell-dim">{role}</span>
-          </span>
+          <a href="/dashboard/settings/profile" class="flex min-w-0 flex-1 items-center gap-3" title="My profile">
+            {avatarSrc ? (
+              <img src={avatarSrc} alt="" class="h-9 w-9 shrink-0 rounded-full object-cover" />
+            ) : (
+              <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-white">{initials}</span>
+            )}
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-sm font-medium text-white">{me?.name}</span>
+              <span class="block text-xs capitalize text-shell-dim">{role}</span>
+            </span>
+          </a>
           <form method="POST" action="/api/auth/logout">
             <button type="submit" class="flex min-h-12 min-w-10 items-center justify-center rounded-lg text-shell-dim hover:text-white" aria-label="Log out" title="Log out">
               <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
@@ -139,8 +148,14 @@ const itemClass = (id: string) =>
             <svg class="h-5 w-5 dark:hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
             <svg class="hidden h-5 w-5 dark:block" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
           </button>
-          <span class="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-xs font-bold text-white">{initials}</span>
-          <span class="hidden text-sm font-medium sm:block">{me?.name?.split(' ')[0]}</span>
+          <a href="/dashboard/settings/profile" class="flex items-center gap-3" title="My profile">
+            {avatarSrc ? (
+              <img src={avatarSrc} alt="" class="h-9 w-9 rounded-full object-cover" />
+            ) : (
+              <span class="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-xs font-bold text-white">{initials}</span>
+            )}
+            <span class="hidden text-sm font-medium sm:block">{me?.name?.split(' ')[0]}</span>
+          </a>
           <form method="POST" action="/api/auth/logout" class="lg:hidden">
             <button type="submit" class="min-h-12 rounded-lg px-2 text-sm text-dim hover:text-body">Log out</button>
           </form>

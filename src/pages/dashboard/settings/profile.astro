@@ -1,0 +1,140 @@
+---
+/**
+ * My profile — personal settings for the signed-in user (every role, no
+ * admin gate). Name, mobile, and a profile photo (R2-backed, png/jpeg ≤2MB)
+ * that replaces the initials bubble in the app chrome.
+ */
+import { env } from 'cloudflare:workers';
+import { eq } from 'drizzle-orm';
+import AppShell from '../../../layouts/AppShell.astro';
+import { createDb, tenantWhere } from '../../../db';
+import { users } from '../../../db/schema';
+import { newId } from '../../../lib/ids';
+
+const tenantId = Astro.locals.tenantId!;
+const userId = Astro.locals.userId!;
+const db = createDb(env.DB);
+
+let notice = '';
+let error = '';
+if (Astro.request.method === 'POST') {
+  try {
+    const form = await Astro.request.formData();
+    const name = String(form.get('name') ?? '').trim();
+    if (!name) {
+      error = 'Your name is required.';
+    } else {
+      const [current] = await db
+        .select({ avatarR2Key: users.avatarR2Key })
+        .from(users)
+        .where(tenantWhere(users, tenantId, eq(users.id, userId)))
+        .limit(1);
+
+      const updates: Record<string, unknown> = {
+        name,
+        phone: String(form.get('phone') ?? '').trim() || null,
+      };
+
+      const photo = form.get('photo');
+      const removePhoto = String(form.get('removePhoto') ?? '') === '1';
+      if (photo instanceof File && photo.size > 0) {
+        if (photo.size > 2 * 1024 * 1024) {
+          error = 'Photo must be 2MB or smaller.';
+        } else {
+          // Never trust the extension or declared MIME — sniff the real
+          // format from magic bytes (same rule as the company logo).
+          const bytes = new Uint8Array(await photo.arrayBuffer());
+          const isPng =
+            bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+          const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+          if (!isPng && !isJpeg) {
+            error = 'Photo must be a PNG or JPEG image — that file appears to be a different format.';
+          } else {
+            const sniffedType = isPng ? 'image/png' : 'image/jpeg';
+            const key = `${tenantId}/avatars/${newId()}`;
+            await env.FILES.put(key, bytes, {
+              httpMetadata: { contentType: sniffedType },
+            });
+            if (current?.avatarR2Key) await env.FILES.delete(current.avatarR2Key);
+            updates.avatarR2Key = key;
+            updates.avatarContentType = sniffedType;
+          }
+        }
+      } else if (removePhoto && current?.avatarR2Key) {
+        await env.FILES.delete(current.avatarR2Key);
+        updates.avatarR2Key = null;
+        updates.avatarContentType = null;
+      }
+
+      if (!error) {
+        await db.update(users).set(updates).where(tenantWhere(users, tenantId, eq(users.id, userId)));
+        notice = 'Profile saved.';
+      }
+    }
+  } catch {
+    error = 'Could not save. Please try again.';
+  }
+}
+
+const [me] = await db
+  .select()
+  .from(users)
+  .where(tenantWhere(users, tenantId, eq(users.id, userId)))
+  .limit(1);
+// Cache-buster: the key changes on every replacement
+const photoSrc = me?.avatarR2Key ? `/api/app/avatar/${userId}?v=${me.avatarR2Key.slice(-8)}` : null;
+const initials = (me?.name ?? '?')
+  .split(/\s+/)
+  .map((w) => w[0])
+  .slice(0, 2)
+  .join('')
+  .toUpperCase();
+---
+
+<AppShell title="My profile" active="settings">
+  <div class="mx-auto max-w-xl space-y-5">
+    <div>
+      <a href="/dashboard/settings" class="text-sm text-dim hover:text-body">← Settings</a>
+      <h2 class="mt-1 text-2xl font-bold">My profile</h2>
+      <p class="text-sm text-dim">How you appear in the app — just for you, not your customers.</p>
+    </div>
+    {notice && <p class="rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300">{notice}</p>}
+    {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
+
+    <form method="POST" enctype="multipart/form-data" class="space-y-4 rounded-2xl border border-edge bg-card p-5">
+      <div class="space-y-2 rounded-xl border border-edge bg-surface p-4">
+        <span class="text-sm font-semibold text-body">Profile photo</span>
+        <div class="flex items-center gap-4">
+          {photoSrc ? (
+            <img src={photoSrc} alt="Your profile photo" class="h-16 w-16 rounded-full object-cover" />
+          ) : (
+            <span class="flex h-16 w-16 items-center justify-center rounded-full bg-accent text-lg font-bold text-white">{initials}</span>
+          )}
+          {photoSrc && (
+            <label class="flex items-center gap-2 text-sm text-dim">
+              <input type="checkbox" name="removePhoto" value="1" class="h-4 w-4 accent-orange-600" />
+              Remove photo
+            </label>
+          )}
+        </div>
+        <input type="file" name="photo" accept="image/png,image/jpeg" class="w-full text-sm text-dim file:mr-3 file:min-h-10 file:rounded-lg file:border-0 file:bg-card-2 file:px-4 file:text-sm file:font-semibold file:text-body" />
+        <p class="text-xs text-faint">PNG or JPEG, up to 2MB. A square photo looks best — it shows in the sidebar and top bar instead of your initials.</p>
+      </div>
+
+      <label class="block space-y-1">
+        <span class="text-sm text-dim">Your name</span>
+        <input name="name" value={me?.name} required class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base focus:border-accent focus:outline-none" />
+      </label>
+      <label class="block space-y-1">
+        <span class="text-sm text-dim">Mobile</span>
+        <input name="phone" type="tel" value={me?.phone ?? ''} placeholder="+44 7700 900123" class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
+      </label>
+      <label class="block space-y-1">
+        <span class="text-sm text-dim">Login email</span>
+        <input value={me?.email} readonly class="w-full min-h-12 rounded-xl border border-edge-2 bg-card-2 px-4 text-base text-dim" />
+        <p class="text-xs text-faint">Your email is your login and can't be changed here.</p>
+      </label>
+      <button type="submit" class="w-full min-h-12 rounded-xl bg-primary font-semibold text-white hover:bg-primary-2">Save profile</button>
+    </form>
+  </div>
+</AppShell>

@@ -3,7 +3,7 @@ import { env } from 'cloudflare:workers';
 import { eq, isNotNull } from 'drizzle-orm';
 import AppShell from '../../../layouts/AppShell.astro';
 import { createDb, tenantWhere } from '../../../db';
-import { accountingConnections, cancelReasons, customers, emailAccounts, expenses, jobSources, jobs, priceBookItems, smsTemplates, tenantDocuments, tenants, timeEntries, users, webForms } from '../../../db/schema';
+import { accountingConnections, cancelReasons, customers, emailAccounts, expenses, jobSources, jobs, priceBookItems, smsTemplates, tenantDocuments, tenants, timeEntries, users } from '../../../db/schema';
 import { canSeeFinancials } from '../../../lib/masking';
 import { twilioConfigured } from '../../../lib/twilio';
 
@@ -50,9 +50,12 @@ const pipelineCount = isAdmin
   ? (await db.select({ id: jobSources.id }).from(jobSources).where(tenantWhere(jobSources, tenantId))).length +
     (await db.select({ id: cancelReasons.id }).from(cancelReasons).where(tenantWhere(cancelReasons, tenantId))).length
   : 0;
-const formsCount = isAdmin
-  ? (await db.select({ id: webForms.id }).from(webForms).where(tenantWhere(webForms, tenantId, eq(webForms.isActive, true)))).length
-  : 0;
+const [me] = await db
+  .select({ name: users.name, phone: users.phone, avatarR2Key: users.avatarR2Key })
+  .from(users)
+  .where(tenantWhere(users, tenantId, eq(users.id, Astro.locals.userId!)))
+  .limit(1);
+const profileCount = [me?.name, me?.phone, me?.avatarR2Key].filter(Boolean).length;
 const regionalCount =
   (tenant?.timezone ? 1 : 0) +
   (tenant?.currency ? 1 : 0) +
@@ -60,6 +63,7 @@ const regionalCount =
   (tenant?.vatNumber ? 1 : 0);
 
 const cards = [
+  { href: '/dashboard/settings/profile', title: 'My profile', desc: 'Your name, mobile, and profile photo.', count: profileCount },
   { href: '/dashboard/settings/business', title: 'Business', desc: 'Company name and contact details on invoices.', count: businessCount },
   { href: '/dashboard/settings/regional', title: 'Regional & VAT', desc: 'Timezone, currency, VAT rate and registration number.', count: regionalCount },
   { href: '/dashboard/settings/team', title: 'Team', desc: 'Techs, admins, roles, and private hourly costs.', count: teamCount },
@@ -68,7 +72,6 @@ const cards = [
   { href: '/dashboard/settings/messaging', title: 'Messaging', desc: 'Missed-call text-back, quiet hours, and your number.', count: messagingCount },
   { href: '/dashboard/settings/sms-templates', title: 'SMS templates', desc: 'The texts you send every day, one tap away.', count: templatesCount },
   { href: '/dashboard/settings/pipeline', title: 'Pipeline insights', desc: 'Job sources and reasons work falls through.', count: pipelineCount },
-  { href: '/dashboard/settings/web-forms', title: 'Web forms', desc: 'Embeddable quote forms for your website.', count: formsCount },
   { href: '/dashboard/settings/email', title: 'Email', desc: 'Gmail — customer emails join inbox threads.', count: emailCount },
   { href: '/dashboard/settings/reviews', title: 'Reviews', desc: 'Review link and the SMS sent after payment.', count: reviewsCount },
   { href: '/dashboard/settings/payments', title: 'Payments', desc: 'Connect Stripe — invoices paid straight to your bank.', count: stripeCount },
@@ -79,18 +82,20 @@ const cards = [
 ---
 
 <AppShell title="Settings" active="settings">
-  {!isAdmin ? (
-    <p class="rounded-2xl border border-edge bg-card p-6 text-dim">
-      Settings are managed by your company owner or admin.
-    </p>
-  ) : (
-    <div class="space-y-6">
-      <div>
-        <p class="text-[11px] font-semibold uppercase tracking-widest text-faint">Tenant configuration</p>
-        <h2 class="mt-1 text-3xl font-bold">Settings</h2>
-      </div>
-      <div class="grid gap-3 md:grid-cols-2">
-        {cards.map((c) => (
+  <div class="space-y-6">
+    <div>
+      <p class="text-[11px] font-semibold uppercase tracking-widest text-faint">
+        {isAdmin ? 'Tenant configuration' : 'Your account'}
+      </p>
+      <h2 class="mt-1 text-3xl font-bold">Settings</h2>
+    </div>
+    {!isAdmin && (
+      <p class="rounded-2xl border border-edge bg-card p-5 text-sm text-dim">
+        Company settings are managed by your owner or admin — but your profile is all yours.
+      </p>
+    )}
+    <div class="grid gap-3 md:grid-cols-2">
+      {(isAdmin ? cards : cards.slice(0, 1)).map((c) => (
           <a href={c.href} class="flex min-h-16 items-center justify-between gap-4 rounded-2xl border border-edge bg-card px-5 py-4 transition-colors hover:border-accent/60">
             <span>
               <span class="block font-bold">{c.title}</span>
@@ -98,8 +103,7 @@ const cards = [
             </span>
             <span class={`text-2xl font-bold ${c.count > 0 ? 'text-body' : 'text-faint'}`}>{c.count}</span>
           </a>
-        ))}
-      </div>
+      ))}
     </div>
-  )}
+  </div>
 </AppShell>
