@@ -70,34 +70,34 @@ if (Astro.request.method === 'POST') {
 <AppShell title={CERT_LABELS[type]} active="jobs">
   <div class="mx-auto max-w-xl space-y-5">
     <div>
-      <a href={`/dashboard/jobs/${jobId}`} class="text-sm text-stone-400 hover:text-stone-200">← {job.title}</a>
+      <a href={`/dashboard/jobs/${jobId}`} class="text-sm text-dim hover:text-body">← {job.title}</a>
       <h2 class="mt-1 text-2xl font-bold">{def.title}</h2>
     </div>
     {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
-    <form method="POST" class="space-y-4 rounded-2xl border border-ink-700 bg-ink-900 p-5">
+    <form method="POST" class="space-y-4 rounded-2xl border border-edge bg-card p-5">
       <label class="block space-y-1">
-        <span class="text-sm text-stone-400">Engineer / operative name *</span>
-        <input name="engineerName" required value={me?.name ?? ''} class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none" />
+        <span class="text-sm text-dim">Engineer / operative name *</span>
+        <input name="engineerName" required value={me?.name ?? ''} class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base focus:border-accent focus:outline-none" />
       </label>
       <label class="block space-y-1">
-        <span class="text-sm text-stone-400">{def.regLabel}</span>
-        <input name="registrationNumber" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none" />
+        <span class="text-sm text-dim">{def.regLabel}</span>
+        <input name="registrationNumber" class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base focus:border-accent focus:outline-none" />
       </label>
       {def.fields.map((field) => (
         <label class="block space-y-1">
-          <span class="text-sm text-stone-400">{field.label}{field.required ? ' *' : ''}</span>
+          <span class="text-sm text-dim">{field.label}{field.required ? ' *' : ''}</span>
           {field.kind === 'textarea' ? (
-            <textarea name={field.key} rows="3" required={field.required} placeholder={field.placeholder} class="w-full rounded-xl border border-ink-600 bg-ink-950 px-4 py-3 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none"></textarea>
+            <textarea name={field.key} rows="3" required={field.required} placeholder={field.placeholder} class="w-full rounded-xl border border-edge-2 bg-surface px-4 py-3 text-base placeholder-faint focus:border-accent focus:outline-none"></textarea>
           ) : field.kind === 'select' ? (
-            <select name={field.key} class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none">
+            <select name={field.key} class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base focus:border-accent focus:outline-none">
               {(field.options ?? []).map((o) => <option value={o}>{o}</option>)}
             </select>
           ) : (
-            <input name={field.key} type={field.kind === 'date' ? 'date' : 'text'} required={field.required} placeholder={field.placeholder} class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+            <input name={field.key} type={field.kind === 'date' ? 'date' : 'text'} required={field.required} placeholder={field.placeholder} class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
           )}
         </label>
       ))}
-      <button type="submit" class="w-full min-h-12 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">Issue certificate</button>
+      <button type="submit" class="w-full min-h-12 rounded-xl bg-primary font-semibold text-white hover:bg-primary-2">Issue certificate</button>
     </form>
   </div>
 </AppShell>

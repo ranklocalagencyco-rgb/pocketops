@@ -1,13 +1,154 @@
 @import "tailwindcss";
 
-/* Pocket Ops "Forge" theme — warm charcoal shell, molten-copper accents.
-   Grounded in the trades: gunmetal, soot, copper pipe, sparks. */
-@theme {
-  --color-ink-950: #151210;
-  --color-ink-900: #1e1a17;
-  --color-ink-800: #2a241f;
-  --color-ink-700: #3a322b;
-  --color-ink-600: #4c4238;
+/* Pocket Ops "Shield" theme — corporate navy chrome, orange reserved for
+   signal moments (FAB, badges, links). Light + dark via [data-theme]. */
+
+@custom-variant dark ([data-theme="dark"] &);
+
+/* Semantic utilities (bg-surface, text-body, border-edge, …) resolve to
+   [data-app]-scoped variables so customer-facing pages keep their own
+   light styling untouched. */
+@theme inline {
+  --color-surface: var(--pk-surface);
+  --color-card: var(--pk-card);
+  --color-card-2: var(--pk-card-2);
+  --color-edge: var(--pk-edge);
+  --color-edge-2: var(--pk-edge-2);
+  --color-body: var(--pk-body);
+  --color-dim: var(--pk-dim);
+  --color-faint: var(--pk-faint);
+  --color-primary: var(--pk-primary);
+  --color-primary-2: var(--pk-primary-2);
+  --color-accent: var(--pk-accent);
+  --color-accent-2: var(--pk-accent-2);
+  --color-accent-soft: var(--pk-accent-soft);
+  --color-accent-edge: var(--pk-accent-edge);
+  --color-accent-text: var(--pk-accent-text);
+  --color-shell: var(--pk-shell);
+  --color-shell-2: var(--pk-shell-2);
+  --color-shell-3: var(--pk-shell-3);
+  --color-shell-text: var(--pk-shell-text);
+  --color-shell-dim: var(--pk-shell-dim);
+  --color-shell-edge: var(--pk-shell-edge);
+}
+
+[data-app] {
+  --pk-surface: #f4f6f9;
+  --pk-card: #ffffff;
+  --pk-card-2: #e9edf3;
+  --pk-edge: #dbe2ea;
+  --pk-edge-2: #c8d2de;
+  --pk-body: #1c2736;
+  --pk-dim: #5b6b7f;
+  --pk-faint: #8595a8;
+  --pk-primary: #16283f;
+  --pk-primary-2: #24405f;
+  --pk-accent: #ea580c;
+  --pk-accent-2: #c2410c;
+  --pk-accent-soft: #fdeadd;
+  --pk-accent-edge: #f3c6a5;
+  --pk-accent-text: #9a3412;
+  --pk-shell: #16283f;
+  --pk-shell-2: #1f3450;
+  --pk-shell-3: #2c4163;
+  --pk-shell-text: #b8c5d6;
+  --pk-shell-dim: #7f91a8;
+  --pk-shell-edge: #22364f;
+
+  /* Status hues follow the dark idiom bg-{hue}-950 / border-{hue}-800 /
+     text-{hue}-300 (+ -400 dots) throughout the app, so light mode remaps
+     those stops to their light-tint equivalents instead of editing every
+     pill. Scoped to [data-app]; public pages see stock Tailwind values. */
+  --color-emerald-950: #ecfdf5;
+  --color-emerald-900: #d1fae5;
+  --color-emerald-800: #a7f3d0;
+  --color-emerald-700: #6ee7b7;
+  --color-emerald-400: #059669;
+  --color-emerald-300: #047857;
+  --color-red-950: #fef2f2;
+  --color-red-900: #fee2e2;
+  --color-red-800: #fecaca;
+  --color-red-400: #dc2626;
+  --color-red-300: #b91c1c;
+  --color-red-200: #991b1b;
+  --color-sky-950: #f0f9ff;
+  --color-sky-800: #bae6fd;
+  --color-sky-400: #0284c7;
+  --color-sky-300: #0369a1;
+  --color-blue-950: #eff6ff;
+  --color-blue-800: #bfdbfe;
+  --color-blue-400: #2563eb;
+  --color-blue-300: #1d4ed8;
+  --color-violet-950: #f5f3ff;
+  --color-violet-800: #ddd6fe;
+  --color-violet-400: #7c3aed;
+  --color-violet-300: #6d28d9;
+  --color-cyan-950: #ecfeff;
+  --color-cyan-800: #a5f3fc;
+  --color-cyan-400: #0891b2;
+  --color-cyan-300: #0e7490;
+  --color-lime-950: #f7fee7;
+  --color-lime-800: #d9f99d;
+  --color-lime-400: #65a30d;
+  --color-lime-300: #4d7c0f;
+}
+
+[data-app][data-theme="dark"] {
+  --pk-surface: #0b1524;
+  --pk-card: #14243a;
+  --pk-card-2: #1c2f4a;
+  --pk-edge: #24364f;
+  --pk-edge-2: #2e4160;
+  --pk-body: #e4ebf3;
+  --pk-dim: #94a6bd;
+  --pk-faint: #64778f;
+  --pk-primary: #2e5f9e;
+  --pk-primary-2: #3a6fb3;
+  --pk-accent: #f97316;
+  --pk-accent-2: #fb8c37;
+  --pk-accent-soft: #3a2416;
+  --pk-accent-edge: #6b3a1a;
+  --pk-accent-text: #fdba74;
+  --pk-shell: #0e1c30;
+  --pk-shell-2: #182a44;
+  --pk-shell-3: #24385a;
+  --pk-shell-text: #a9b8cc;
+  --pk-shell-dim: #6e819c;
+  --pk-shell-edge: #1c2e49;
+
+  /* Restore true dark stops for status hues. */
+  --color-emerald-950: #022c22;
+  --color-emerald-900: #064e3b;
+  --color-emerald-800: #065f46;
+  --color-emerald-700: #047857;
+  --color-emerald-400: #34d399;
+  --color-emerald-300: #6ee7b7;
+  --color-red-950: #450a0a;
+  --color-red-900: #7f1d1d;
+  --color-red-800: #991b1b;
+  --color-red-400: #f87171;
+  --color-red-300: #fca5a5;
+  --color-red-200: #fecaca;
+  --color-sky-950: #082f49;
+  --color-sky-800: #075985;
+  --color-sky-400: #38bdf8;
+  --color-sky-300: #7dd3fc;
+  --color-blue-950: #172554;
+  --color-blue-800: #1e40af;
+  --color-blue-400: #60a5fa;
+  --color-blue-300: #93c5fd;
+  --color-violet-950: #2e1065;
+  --color-violet-800: #5b21b6;
+  --color-violet-400: #a78bfa;
+  --color-violet-300: #c4b5fd;
+  --color-cyan-950: #083344;
+  --color-cyan-800: #155e75;
+  --color-cyan-400: #22d3ee;
+  --color-cyan-300: #67e8f9;
+  --color-lime-950: #1a2e05;
+  --color-lime-800: #3f6212;
+  --color-lime-400: #a3e635;
+  --color-lime-300: #bef264;
 }
 
 /* Fat-finger baseline: every interactive element on mobile meets 48px.

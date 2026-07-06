@@ -1,5 +1,6 @@
 ---
 import '../../styles/global.css';
+import ThemeInit from '../../components/ThemeInit.astro';
 import { env } from 'cloudflare:workers';
 import { eq } from 'drizzle-orm';
 import { createDb } from '../../db';
@@ -37,38 +38,39 @@ if (found && Astro.request.method === 'POST') {
 }
 ---
 
-<html lang="en">
+<html lang="en" data-app>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <ThemeInit />
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" href="/icons/favicon.png" type="image/png" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <title>Set a new password · Pocket Ops</title>
   </head>
-  <body class="min-h-screen bg-ink-950 text-stone-100 flex items-center justify-center p-4">
+  <body class="min-h-screen bg-surface text-body flex items-center justify-center p-4">
     <main class="w-full max-w-sm space-y-6">
       <div class="text-center">
         <img src="/icons/icon-192.png" alt="Pocket Ops" class="mx-auto h-16 w-16 rounded-2xl bg-white object-cover shadow-lg" />
         <h1 class="mt-3 text-2xl font-bold">Pocket Ops</h1>
-        <p class="mt-1 text-stone-400">Set a new password</p>
+        <p class="mt-1 text-dim">Set a new password</p>
       </div>
       {error && <p class="rounded-lg bg-red-950 border border-red-800 px-4 py-3 text-sm text-red-300">{error}</p>}
       {done ? (
-        <p class="rounded-lg bg-ink-900 border border-ink-600 px-4 py-3 text-sm text-stone-300">
-          Your password has been updated. <a href="/login" class="text-amber-400 hover:underline">Log in</a>
+        <p class="rounded-lg bg-card border border-edge-2 px-4 py-3 text-sm text-dim">
+          Your password has been updated. <a href="/login" class="text-accent-text hover:underline">Log in</a>
         </p>
       ) : found ? (
         <form method="POST" class="space-y-4">
-          <input name="password" type="password" required minlength="8" placeholder="New password (8+ characters)" autocomplete="new-password" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-900 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
-          <input name="confirm" type="password" required minlength="8" placeholder="Confirm new password" autocomplete="new-password" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-900 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
-          <button type="submit" class="w-full min-h-12 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">
+          <input name="password" type="password" required minlength="8" placeholder="New password (8+ characters)" autocomplete="new-password" class="w-full min-h-12 rounded-xl border border-edge-2 bg-card px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
+          <input name="confirm" type="password" required minlength="8" placeholder="Confirm new password" autocomplete="new-password" class="w-full min-h-12 rounded-xl border border-edge-2 bg-card px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
+          <button type="submit" class="w-full min-h-12 rounded-xl bg-primary font-semibold text-white hover:bg-primary-2">
             Set new password
           </button>
         </form>
       ) : (
-        <p class="text-center text-sm text-stone-400">
-          <a href="/forgot-password" class="text-amber-400 hover:underline">Request a new link</a>
+        <p class="text-center text-sm text-dim">
+          <a href="/forgot-password" class="text-accent-text hover:underline">Request a new link</a>
         </p>
       )}
     </main>

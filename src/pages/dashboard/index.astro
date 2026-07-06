@@ -116,11 +116,11 @@ const stageStyle: Record<JobStatus, { dot: string; bar: string; pill: string }> 
   quoted: { dot: 'bg-violet-400', bar: 'bg-violet-400', pill: 'bg-violet-950 text-violet-300 border-violet-800' },
   approved: { dot: 'bg-cyan-400', bar: 'bg-cyan-400', pill: 'bg-cyan-950 text-cyan-300 border-cyan-800' },
   scheduled: { dot: 'bg-blue-400', bar: 'bg-blue-400', pill: 'bg-blue-950 text-blue-300 border-blue-800' },
-  in_progress: { dot: 'bg-amber-400', bar: 'bg-amber-400', pill: 'bg-amber-950 text-amber-300 border-amber-800' },
+  in_progress: { dot: 'bg-accent', bar: 'bg-accent', pill: 'bg-accent-soft text-accent-text border-accent-edge' },
   completed: { dot: 'bg-lime-400', bar: 'bg-lime-400', pill: 'bg-lime-950 text-lime-300 border-lime-800' },
-  invoiced: { dot: 'bg-orange-400', bar: 'bg-orange-400', pill: 'bg-orange-950 text-orange-300 border-orange-800' },
+  invoiced: { dot: 'bg-accent', bar: 'bg-accent', pill: 'bg-accent-soft text-accent-text border-accent-edge' },
   paid: { dot: 'bg-emerald-400', bar: 'bg-emerald-400', pill: 'bg-emerald-950 text-emerald-300 border-emerald-800' },
-  cancelled: { dot: 'bg-slate-500', bar: 'bg-slate-500', pill: 'bg-ink-800 text-stone-400 border-ink-600' },
+  cancelled: { dot: 'bg-slate-500', bar: 'bg-slate-500', pill: 'bg-card-2 text-dim border-edge-2' },
 };
 const counts = Object.fromEntries(PIPELINE.map((s) => [s, 0])) as Record<JobStatus, number>;
 for (const j of allJobs) if (j.status in counts) counts[j.status]++;
@@ -133,29 +133,29 @@ const recent = allJobs.slice(0, 6);
   <div class="space-y-6">
     <div class="flex flex-wrap items-end justify-between gap-3">
       <div>
-        <p class="text-[11px] font-semibold uppercase tracking-widest text-stone-500">{tenant?.name}</p>
+        <p class="text-[11px] font-semibold uppercase tracking-widest text-faint">{tenant?.name}</p>
         <h2 class="mt-1 text-3xl font-bold">{greeting}, {me?.name?.split(' ')[0]}</h2>
       </div>
       <div class="flex items-center gap-3">
-        <span class="text-sm text-stone-400">{today}</span>
-        <a href="/dashboard/jobs" class="flex min-h-12 items-center rounded-xl bg-orange-600 px-4 font-semibold text-white hover:bg-orange-500">View jobs</a>
+        <span class="text-sm text-dim">{today}</span>
+        <a href="/dashboard/jobs" class="flex min-h-12 items-center rounded-xl bg-primary px-4 font-semibold text-white hover:bg-primary-2">View jobs</a>
       </div>
     </div>
 
     <!-- KPI cards -->
     <div class="grid grid-cols-2 gap-3 xl:grid-cols-4">
       {cards.map((card, i) => (
-        <div class="rounded-2xl bg-gradient-to-r from-orange-700 via-orange-600 to-amber-500 p-4">
+        <div class="rounded-2xl border border-edge bg-card p-4">
           <div class="flex items-start gap-3">
-            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/20">
-              <svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+              <svg class="h-5 w-5 text-primary dark:text-accent-text" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d={cardIcons[i]} />
               </svg>
             </span>
             <div class="min-w-0">
-              <p class="truncate text-[11px] font-semibold uppercase tracking-wider text-white/80">{card.label}</p>
-              <p class="mt-1 text-2xl font-bold text-white xl:text-3xl">{card.value}</p>
-              <p class="text-xs text-white/75">{card.sub}</p>
+              <p class="truncate text-[11px] font-semibold uppercase tracking-wider text-faint">{card.label}</p>
+              <p class="mt-1 text-2xl font-bold xl:text-3xl">{card.value}</p>
+              <p class="text-xs text-dim">{card.sub}</p>
             </div>
           </div>
         </div>
@@ -164,13 +164,13 @@ const recent = allJobs.slice(0, 6);
 
     <div class="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
       <!-- Pipeline -->
-      <section class="rounded-2xl border border-ink-700 bg-ink-900 p-5">
+      <section class="rounded-2xl border border-edge bg-card p-5">
         <div class="flex items-baseline justify-between">
           <div>
             <h3 class="font-bold">Pipeline</h3>
-            <p class="text-sm text-stone-400">{pipelineTotal} {pipelineTotal === 1 ? 'job' : 'jobs'} in the pipeline</p>
+            <p class="text-sm text-dim">{pipelineTotal} {pipelineTotal === 1 ? 'job' : 'jobs'} in the pipeline</p>
           </div>
-          <a href="/dashboard/jobs" class="text-sm text-amber-400 hover:underline">View board →</a>
+          <a href="/dashboard/jobs" class="text-sm text-accent-text hover:underline">View board →</a>
         </div>
         {pipelineTotal > 0 && (
           <div class="mt-4 flex h-1.5 gap-1 overflow-hidden rounded-full">
@@ -183,8 +183,8 @@ const recent = allJobs.slice(0, 6);
           {PIPELINE.map((s) => (
             <a href={`/dashboard/jobs?status=${s}`} class="group flex items-center gap-3">
               <span class={`h-2 w-2 shrink-0 rounded-full ${stageStyle[s].dot}`} />
-              <span class="w-28 shrink-0 text-sm text-stone-300 group-hover:text-white">{STATUS_LABELS[s]}</span>
-              <span class="h-1 flex-1 overflow-hidden rounded-full bg-ink-700">
+              <span class="w-28 shrink-0 text-sm text-dim group-hover:text-body">{STATUS_LABELS[s]}</span>
+              <span class="h-1 flex-1 overflow-hidden rounded-full bg-card-2">
                 <span class={`block h-full rounded-full ${stageStyle[s].bar}`} style={`width: ${(counts[s] / maxCount) * 100}%`} />
               </span>
               <span class="w-8 text-right text-sm font-semibold">{counts[s]}</span>
@@ -194,26 +194,26 @@ const recent = allJobs.slice(0, 6);
       </section>
 
       <!-- Today -->
-      <section class="flex flex-col rounded-2xl border border-ink-700 bg-ink-900 p-5">
+      <section class="flex flex-col rounded-2xl border border-edge bg-card p-5">
         <div class="flex items-baseline justify-between">
           <h3 class="font-bold">Today</h3>
-          <span class="text-xs text-stone-500">{todaysJobs.length} appts</span>
+          <span class="text-xs text-faint">{todaysJobs.length} appts</span>
         </div>
         {todaysJobs.length === 0 ? (
           <div class="flex flex-1 flex-col items-center justify-center gap-2 py-10 text-center">
-            <span class="flex h-12 w-12 items-center justify-center rounded-full bg-ink-800 text-xl">⚡</span>
-            <p class="text-sm text-stone-400">Nothing scheduled today.</p>
-            <a href="/dashboard/jobs?status=scheduled" class="text-sm text-amber-400 hover:underline">View scheduled →</a>
+            <span class="flex h-12 w-12 items-center justify-center rounded-full bg-card-2 text-xl">⚡</span>
+            <p class="text-sm text-dim">Nothing scheduled today.</p>
+            <a href="/dashboard/jobs?status=scheduled" class="text-sm text-accent-text hover:underline">View scheduled →</a>
           </div>
         ) : (
           <div class="mt-3 space-y-2">
             {todaysJobs.map((j) => (
-              <a href={`/dashboard/jobs/${j.id}`} class="flex min-h-14 items-center justify-between gap-3 rounded-xl border border-ink-700 bg-ink-950 px-3 py-2 hover:border-amber-500/50">
+              <a href={`/dashboard/jobs/${j.id}`} class="flex min-h-14 items-center justify-between gap-3 rounded-xl border border-edge bg-surface px-3 py-2 hover:border-accent/50">
                 <span class="min-w-0">
                   <span class="block truncate text-sm font-medium">{j.title}</span>
-                  <span class="block truncate text-xs text-stone-400">{j.customerName}</span>
+                  <span class="block truncate text-xs text-dim">{j.customerName}</span>
                 </span>
-                <span class="text-xs font-semibold text-amber-400">
+                <span class="text-xs font-semibold text-accent-text">
                   {j.scheduledAt && new Intl.DateTimeFormat('en-GB', { timeStyle: 'short', timeZone: tz }).format(j.scheduledAt)}
                 </span>
               </a>
@@ -224,16 +224,16 @@ const recent = allJobs.slice(0, 6);
     </div>
 
     {missedCalls.length > 0 && (
-      <section class="rounded-2xl border border-ink-700 bg-ink-900 p-5">
+      <section class="rounded-2xl border border-edge bg-card p-5">
         <h3 class="font-bold">Missed calls</h3>
         <div class="mt-3 space-y-2">
           {missedCalls.map((c) => (
-            <a href={`tel:${c.fromNumber}`} class="flex min-h-14 items-center justify-between gap-3 rounded-xl border border-ink-700 bg-ink-950 px-3 py-2 hover:border-amber-500/50">
+            <a href={`tel:${c.fromNumber}`} class="flex min-h-14 items-center justify-between gap-3 rounded-xl border border-edge bg-surface px-3 py-2 hover:border-accent/50">
               <span>
                 <span class="block text-sm font-medium">{c.customerName ?? c.fromNumber}</span>
-                <span class="block text-xs text-stone-400">{fmtDateTz(c.createdAt, tz)}</span>
+                <span class="block text-xs text-dim">{fmtDateTz(c.createdAt, tz)}</span>
               </span>
-              <span class={`text-xs ${c.textBackSentAt ? 'text-emerald-400' : 'text-stone-500'}`}>
+              <span class={`text-xs ${c.textBackSentAt ? 'text-emerald-400' : 'text-faint'}`}>
                 {c.textBackSentAt ? '✓ Text-back sent' : 'No text-back'}
               </span>
             </a>
@@ -243,20 +243,20 @@ const recent = allJobs.slice(0, 6);
     )}
 
     <!-- Recent jobs -->
-    <section class="rounded-2xl border border-ink-700 bg-ink-900 p-5">
+    <section class="rounded-2xl border border-edge bg-card p-5">
       <div class="flex items-baseline justify-between">
         <h3 class="font-bold">Recent jobs</h3>
-        <a href="/dashboard/jobs" class="text-sm text-amber-400 hover:underline">All jobs →</a>
+        <a href="/dashboard/jobs" class="text-sm text-accent-text hover:underline">All jobs →</a>
       </div>
       {recent.length === 0 ? (
-        <p class="mt-4 rounded-xl border border-dashed border-ink-600 p-8 text-center text-sm text-stone-500">
+        <p class="mt-4 rounded-xl border border-dashed border-edge-2 p-8 text-center text-sm text-faint">
           No jobs yet — tap “New job” to create your first one.
         </p>
       ) : (
         <div class="mt-3 overflow-x-auto">
           <table class="w-full min-w-125 text-left">
             <thead>
-              <tr class="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+              <tr class="text-[11px] font-semibold uppercase tracking-wider text-faint">
                 <th class="pb-2 pr-4">Job</th>
                 <th class="pb-2 pr-4">Customer</th>
                 <th class="pb-2 pr-4">Stage</th>
@@ -265,9 +265,9 @@ const recent = allJobs.slice(0, 6);
             </thead>
             <tbody>
               {recent.map((j) => (
-                <tr class="cursor-pointer border-t border-ink-700 hover:bg-ink-800/50" onclick={`window.location='/dashboard/jobs/${j.id}'`}>
+                <tr class="cursor-pointer border-t border-edge hover:bg-card-2/60" onclick={`window.location='/dashboard/jobs/${j.id}'`}>
                   <td class="py-3.5 pr-4 text-sm font-medium">{j.title}</td>
-                  <td class="py-3.5 pr-4 text-sm text-stone-300">{j.customerName}</td>
+                  <td class="py-3.5 pr-4 text-sm text-dim">{j.customerName}</td>
                   <td class="py-3.5 pr-4">
                     <span class={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${stageStyle[j.status].pill}`}>
                       <span class={`h-1.5 w-1.5 rounded-full ${stageStyle[j.status].dot}`} />

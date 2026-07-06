@@ -57,45 +57,45 @@ const statusText = live
 <AppShell title="Payments" active="settings">
   <div class="mx-auto max-w-xl space-y-5">
     <div>
-      <a href="/dashboard/settings" class="text-sm text-stone-400 hover:text-stone-200">← Settings</a>
+      <a href="/dashboard/settings" class="text-sm text-dim hover:text-body">← Settings</a>
       <h2 class="mt-1 text-2xl font-bold">Payments</h2>
-      <p class="text-sm text-stone-400">One-tap Stripe Checkout on every invoice link — Apple Pay, Google Pay, and cards — paid directly into your own Stripe account.</p>
+      <p class="text-sm text-dim">One-tap Stripe Checkout on every invoice link — Apple Pay, Google Pay, and cards — paid directly into your own Stripe account.</p>
     </div>
 
     {hadError && (
       <p class="rounded-xl border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-300">Couldn't reach Stripe just then — try again.</p>
     )}
 
-    <p class={`rounded-xl border px-4 py-3 text-sm font-medium ${live ? 'border-emerald-800 bg-emerald-950 text-emerald-300' : 'border-amber-800 bg-amber-950/40 text-amber-300'}`}>
+    <p class={`rounded-xl border px-4 py-3 text-sm font-medium ${live ? 'border-emerald-800 bg-emerald-950 text-emerald-300' : 'border-accent-edge bg-accent-soft/60 text-accent-text'}`}>
       {statusText}
     </p>
 
-    <div class="space-y-3 rounded-2xl border border-ink-700 bg-ink-900 p-5">
+    <div class="space-y-3 rounded-2xl border border-edge bg-card p-5">
       <p class="font-semibold">Your Stripe account</p>
       {!platformReady ? (
-        <p class="text-sm text-stone-400">Online payments aren't available on this Pocket Ops installation yet. Check back soon.</p>
+        <p class="text-sm text-dim">Online payments aren't available on this Pocket Ops installation yet. Check back soon.</p>
       ) : live ? (
         <>
-          <p class="text-sm text-stone-400">Connected as <span class="font-mono text-xs text-amber-300">{tenant.stripeAccountId}</span>. Payouts, refunds, and disputes are managed in your own Stripe dashboard.</p>
-          <a href="https://dashboard.stripe.com" target="_blank" rel="noopener" class="inline-flex min-h-12 items-center rounded-xl border border-ink-600 px-4 text-sm font-semibold text-stone-200 hover:bg-ink-800">Open Stripe dashboard ↗</a>
+          <p class="text-sm text-dim">Connected as <span class="font-mono text-xs text-accent-text">{tenant.stripeAccountId}</span>. Payouts, refunds, and disputes are managed in your own Stripe dashboard.</p>
+          <a href="https://dashboard.stripe.com" target="_blank" rel="noopener" class="inline-flex min-h-12 items-center rounded-xl border border-edge-2 px-4 text-sm font-semibold text-body hover:bg-card-2">Open Stripe dashboard ↗</a>
         </>
       ) : (
         <>
-          <p class="text-sm text-stone-400">
+          <p class="text-sm text-dim">
             {connected
               ? 'Your Stripe account was created but setup isn’t finished. Pick up where you left off — it usually takes a few minutes.'
               : 'Connect a free Stripe account (or link an existing one) so customers can pay invoices by card, Apple Pay, or Google Pay. Payouts land in your business bank account, usually within 2 working days.'}
           </p>
-          <a href="/api/integrations/stripe/connect" class="inline-flex min-h-12 items-center rounded-xl bg-gradient-to-r from-orange-700 via-orange-600 to-amber-500 px-5 text-sm font-semibold text-white active:scale-[0.99]">
+          <a href="/api/integrations/stripe/connect" class="inline-flex min-h-12 items-center rounded-xl bg-primary hover:bg-primary-2 px-5 text-sm font-semibold text-white active:scale-[0.99]">
             {connected ? 'Finish Stripe setup' : 'Connect Stripe'}
           </a>
         </>
       )}
     </div>
 
-    <div class="rounded-2xl border border-ink-700 bg-ink-900 p-5 text-sm text-stone-400">
-      <p class="font-semibold text-stone-200">How customers pay</p>
-      <p class="mt-1">When a job moves to <span class="text-amber-300">Invoiced</span>, its job page shows a secure payment link. Text it to the customer — they tap once, pay with Apple Pay, Google Pay, or a card, and the job flips to <span class="text-emerald-300">Paid</span> automatically, firing the review text and accounting sync. The money settles in your Stripe account, never anyone else's.</p>
+    <div class="rounded-2xl border border-edge bg-card p-5 text-sm text-dim">
+      <p class="font-semibold text-body">How customers pay</p>
+      <p class="mt-1">When a job moves to <span class="text-accent-text">Invoiced</span>, its job page shows a secure payment link. Text it to the customer — they tap once, pay with Apple Pay, Google Pay, or a card, and the job flips to <span class="text-emerald-300">Paid</span> automatically, firing the review text and accounting sync. The money settles in your Stripe account, never anyone else's.</p>
     </div>
   </div>
 </AppShell>

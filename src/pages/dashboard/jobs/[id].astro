@@ -387,18 +387,18 @@ const balanceCents = Math.max(0, job.totalCents - cisCents - paidSoFarCents);
 <AppShell title={job.title} active="jobs">
   <div class="space-y-6">
     <div>
-      <a href="/dashboard/jobs" class="text-sm text-stone-400 hover:text-stone-200">← All jobs</a>
+      <a href="/dashboard/jobs" class="text-sm text-dim hover:text-body">← All jobs</a>
       <div class="mt-1 flex items-start justify-between gap-3">
         <div>
           <h1 class="text-xl font-bold">{job.title}</h1>
-          <p class="text-stone-400">
+          <p class="text-dim">
             {customer?.name}{customer?.phone ? ` · ${customer.phone}` : ''}
           </p>
           {customer?.addressLine1 && (
-            <p class="text-sm text-stone-500">{[customer.addressLine1, customer.city, customer.region].filter(Boolean).join(', ')}</p>
+            <p class="text-sm text-faint">{[customer.addressLine1, customer.city, customer.region].filter(Boolean).join(', ')}</p>
           )}
         </div>
-        <span class="whitespace-nowrap rounded-full border border-amber-800 bg-amber-950 px-3 py-1.5 text-sm text-amber-300">
+        <span class="whitespace-nowrap rounded-full border border-accent-edge bg-accent-soft px-3 py-1.5 text-sm text-accent-text">
           {STATUS_LABELS[job.status]}
         </span>
       </div>
@@ -407,12 +407,12 @@ const balanceCents = Math.max(0, job.totalCents - cisCents - paidSoFarCents);
     {(customer?.phone || mapsUrl) && (
       <div class="grid grid-cols-2 gap-2">
         {customer?.phone && (
-          <a href={`tel:${customer.phone}`} class="flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-ink-600 bg-ink-900 font-semibold text-stone-100 hover:border-amber-500">
+          <a href={`tel:${customer.phone}`} class="flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-edge-2 bg-card font-semibold text-body hover:border-accent">
             📞 Call customer
           </a>
         )}
         {mapsUrl && (
-          <a href={mapsUrl} target="_blank" rel="noopener" class="flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-ink-600 bg-ink-900 font-semibold text-stone-100 hover:border-amber-500">
+          <a href={mapsUrl} target="_blank" rel="noopener" class="flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-edge-2 bg-card font-semibold text-body hover:border-accent">
             🧭 Directions
           </a>
         )}
@@ -423,36 +423,36 @@ const balanceCents = Math.max(0, job.totalCents - cisCents - paidSoFarCents);
       <div class="grid grid-cols-2 gap-2">
         <form method="POST">
           <input type="hidden" name="intent" value="sms-omw" />
-          <button type="submit" class="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 text-sm font-semibold text-stone-200 hover:border-amber-500">
+          <button type="submit" class="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-edge-2 bg-card text-sm font-semibold text-body hover:border-accent">
             🚐 Text “On my way”
           </button>
         </form>
         <form method="POST">
           <input type="hidden" name="intent" value="sms-reminder" />
-          <button type="submit" class="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 text-sm font-semibold text-stone-200 hover:border-amber-500">
+          <button type="submit" class="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-edge-2 bg-card text-sm font-semibold text-body hover:border-accent">
             🔔 Text reminder
           </button>
         </form>
       </div>
     )}
 
-    <div class="space-y-3 rounded-2xl border border-ink-700 bg-ink-900 p-4">
+    <div class="space-y-3 rounded-2xl border border-edge bg-card p-4">
       <form method="POST" class="flex flex-wrap items-end gap-2">
         <input type="hidden" name="intent" value="reschedule" />
         <label class="min-w-0 flex-1 space-y-1">
-          <span class="text-sm text-stone-400">🗓 Scheduled for</span>
-          <input name="scheduledAt" type="datetime-local" value={dtLocal} class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 text-base focus:border-amber-500 focus:outline-none" />
+          <span class="text-sm text-dim">🗓 Scheduled for</span>
+          <input name="scheduledAt" type="datetime-local" value={dtLocal} class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-3 text-base focus:border-accent focus:outline-none" />
         </label>
-        <button type="submit" class="min-h-12 rounded-xl border border-ink-600 px-4 text-stone-300 hover:border-amber-500">Save</button>
+        <button type="submit" class="min-h-12 rounded-xl border border-edge-2 px-4 text-dim hover:border-accent">Save</button>
       </form>
       {!isFieldRole && (
         <form method="POST" class="flex items-center gap-2">
           <input type="hidden" name="intent" value="cis" />
           <input type="hidden" name="enabled" value={job.cisReverseCharge ? '0' : '1'} />
-          <span class="flex-1 text-sm text-stone-400">
+          <span class="flex-1 text-sm text-dim">
             🏗 CIS subcontractor invoice {job.cisReverseCharge ? '(on — reverse charge VAT, 20% labour deduction)' : '(off)'}
           </span>
-          <button type="submit" class={`min-h-12 rounded-xl border px-4 text-sm font-semibold ${job.cisReverseCharge ? 'border-emerald-700 text-emerald-400' : 'border-ink-600 text-stone-300 hover:border-amber-500'}`}>
+          <button type="submit" class={`min-h-12 rounded-xl border px-4 text-sm font-semibold ${job.cisReverseCharge ? 'border-emerald-700 text-emerald-400' : 'border-edge-2 text-dim hover:border-accent'}`}>
             {job.cisReverseCharge ? 'Turn off' : 'Turn on'}
           </button>
         </form>
@@ -460,17 +460,17 @@ const balanceCents = Math.max(0, job.totalCents - cisCents - paidSoFarCents);
       {!isFieldRole && (
         <form method="POST" class="flex items-center gap-2">
           <input type="hidden" name="intent" value="recurrence" />
-          <span class="text-sm text-stone-400">🔁 Repeats</span>
-          <select name="months" class="min-h-12 flex-1 rounded-xl border border-ink-600 bg-ink-950 px-3 text-base">
+          <span class="text-sm text-dim">🔁 Repeats</span>
+          <select name="months" class="min-h-12 flex-1 rounded-xl border border-edge-2 bg-surface px-3 text-base">
             <option value="0" selected={!job.recurrenceMonths}>Never</option>
             <option value="3" selected={job.recurrenceMonths === 3}>Every 3 months</option>
             <option value="6" selected={job.recurrenceMonths === 6}>Every 6 months</option>
             <option value="12" selected={job.recurrenceMonths === 12}>Every 12 months</option>
           </select>
-          <button type="submit" class="min-h-12 rounded-xl border border-ink-600 px-4 text-stone-300 hover:border-amber-500">Save</button>
+          <button type="submit" class="min-h-12 rounded-xl border border-edge-2 px-4 text-dim hover:border-accent">Save</button>
         </form>
       )}
-      <a href={`/api/app/pdf/${jobId}`} target="_blank" class="flex min-h-12 items-center justify-center rounded-xl border border-amber-500 text-sm font-semibold text-amber-400 hover:bg-amber-950">
+      <a href={`/api/app/pdf/${jobId}`} target="_blank" class="flex min-h-12 items-center justify-center rounded-xl border border-accent text-sm font-semibold text-accent-text hover:bg-accent-soft">
         ⬇ Download {job.status === 'invoiced' || job.status === 'paid' ? 'invoice' : 'quote'} PDF
       </a>
     </div>
@@ -483,7 +483,7 @@ const balanceCents = Math.max(0, job.totalCents - cisCents - paidSoFarCents);
           <form method="POST">
             <input type="hidden" name="intent" value="status" />
             <input type="hidden" name="to" value={to} />
-            <button type="submit" class={`min-h-12 rounded-xl px-4 font-semibold ${to === 'cancelled' ? 'border border-ink-600 text-stone-400 hover:text-red-300' : 'bg-orange-600 text-white hover:bg-orange-500'}`}>
+            <button type="submit" class={`min-h-12 rounded-xl px-4 font-semibold ${to === 'cancelled' ? 'border border-edge-2 text-dim hover:text-red-300' : 'bg-primary text-white hover:bg-primary-2'}`}>
               {to === 'paid' ? 'Mark paid (cash/cheque)' : `→ ${STATUS_LABELS[to]}`}
             </button>
           </form>
@@ -492,25 +492,25 @@ const balanceCents = Math.max(0, job.totalCents - cisCents - paidSoFarCents);
     )}
 
     {(job.status === 'invoiced' || job.status === 'paid') && (
-      <section class="rounded-2xl border border-amber-800/60 bg-amber-950/40 p-4">
-        <h2 class="font-semibold text-amber-300">{job.status === 'paid' ? 'Paid' : 'Customer payment link'}</h2>
+      <section class="rounded-2xl border border-accent-edge/60 bg-accent-soft/60 p-4">
+        <h2 class="font-semibold text-accent-text">{job.status === 'paid' ? 'Paid' : 'Customer payment link'}</h2>
         {job.status === 'paid' ? (
           <>
-            <p class="mt-1 text-sm text-amber-200/80">
+            <p class="mt-1 text-sm text-accent-text/90">
               Collected {job.paidAt ? fmtDateTz(job.paidAt, tz) : ''} — {money(job.totalCents)}
             </p>
             {paymentRows.map((p) => (
-              <p class="mt-1 text-xs text-amber-200/60">
+              <p class="mt-1 text-xs text-accent-text/70">
                 {p.method.replace('_', ' ')} · {fmtMoney(p.amountCents, p.currency)} · {p.paidAt ? fmtDateTz(p.paidAt, tz) : p.status}
               </p>
             ))}
           </>
         ) : (
           <>
-            <p class="mt-1 text-sm text-amber-200/80">Text or email this secure link — one tap to pay, no account needed:</p>
-            <input readonly value={magicLink} onclick="this.select()" class="mt-2 w-full min-h-12 rounded-xl border border-amber-800 bg-ink-950 px-3 font-mono text-xs text-amber-300" />
+            <p class="mt-1 text-sm text-accent-text/90">Text or email this secure link — one tap to pay, no account needed:</p>
+            <input readonly value={magicLink} onclick="this.select()" class="mt-2 w-full min-h-12 rounded-xl border border-accent-edge bg-surface px-3 font-mono text-xs text-accent-text" />
             {(paidSoFarCents > 0 || cisCents > 0) && (
-              <p class="mt-2 text-sm text-amber-200/80">
+              <p class="mt-2 text-sm text-accent-text/90">
                 {paidSoFarCents > 0 && `Paid so far ${money(paidSoFarCents)} · `}
                 {cisCents > 0 && `CIS deduction ${money(cisCents)} · `}
                 Balance due <span class="font-bold">{money(balanceCents)}</span>
@@ -522,17 +522,17 @@ const balanceCents = Math.max(0, job.totalCents - cisCents - paidSoFarCents);
     )}
 
     <section class="space-y-3">
-      <h2 class="text-sm font-semibold uppercase tracking-wide text-stone-400">Line items</h2>
-      {items.length === 0 && <p class="text-sm text-stone-500">No items yet.</p>}
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-dim">Line items</h2>
+      {items.length === 0 && <p class="text-sm text-faint">No items yet.</p>}
       <div class="space-y-2">
         {items.map((li) => (
-          <div class="flex items-center justify-between gap-3 rounded-xl border border-ink-700 bg-ink-900 px-4 py-3">
+          <div class="flex items-center justify-between gap-3 rounded-xl border border-edge bg-card px-4 py-3">
             <div class="min-w-0">
               <p class="truncate font-medium">{li.description}</p>
-              <p class="text-sm text-stone-400">
+              <p class="text-sm text-dim">
                 {li.kind} · {li.quantity} × {money(li.unitPriceCents)}
                 {showCosts && li.unitCostCents != null && (
-                  <span class="text-stone-500"> · cost {money(li.unitCostCents)}</span>
+                  <span class="text-faint"> · cost {money(li.unitCostCents)}</span>
                 )}
               </p>
             </div>
@@ -541,7 +541,7 @@ const balanceCents = Math.max(0, job.totalCents - cisCents - paidSoFarCents);
               <form method="POST">
                 <input type="hidden" name="intent" value="delete-item" />
                 <input type="hidden" name="itemId" value={li.id} />
-                <button type="submit" class="min-h-12 min-w-12 rounded-lg text-stone-500 hover:text-red-400" aria-label="Delete item">✕</button>
+                <button type="submit" class="min-h-12 min-w-12 rounded-lg text-faint hover:text-red-400" aria-label="Delete item">✕</button>
               </form>
             </div>
           </div>
@@ -551,50 +551,50 @@ const balanceCents = Math.max(0, job.totalCents - cisCents - paidSoFarCents);
       {bookItems.length > 0 && (
         <form method="POST" class="flex gap-2">
           <input type="hidden" name="intent" value="add-from-book" />
-          <select name="bookItemId" class="min-h-12 flex-1 rounded-xl border border-ink-600 bg-ink-900 px-3 text-base">
+          <select name="bookItemId" class="min-h-12 flex-1 rounded-xl border border-edge-2 bg-card px-3 text-base">
             {bookItems.map((b) => (
               <option value={b.id}>{b.description} — {money(b.unitPriceCents)}</option>
             ))}
           </select>
-          <button type="submit" class="min-h-12 whitespace-nowrap rounded-xl border border-amber-500 px-4 font-semibold text-amber-400 hover:bg-amber-950">Quick add</button>
+          <button type="submit" class="min-h-12 whitespace-nowrap rounded-xl border border-accent px-4 font-semibold text-accent-text hover:bg-accent-soft">Quick add</button>
         </form>
       )}
 
-      <form method="POST" class="space-y-3 rounded-2xl border border-ink-700 bg-ink-900 p-4">
+      <form method="POST" class="space-y-3 rounded-2xl border border-edge bg-card p-4">
         <input type="hidden" name="intent" value="add-item" />
         <div class="grid grid-cols-2 gap-3">
-          <select name="kind" class="min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 text-base">
+          <select name="kind" class="min-h-12 rounded-xl border border-edge-2 bg-surface px-3 text-base">
             <option value="labor">Labor</option>
             <option value="material">Material</option>
             <option value="fee">Fee</option>
           </select>
-          <input name="quantity" type="number" step="0.25" min="0.25" value="1" required class="min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 text-base" placeholder="Qty" />
+          <input name="quantity" type="number" step="0.25" min="0.25" value="1" required class="min-h-12 rounded-xl border border-edge-2 bg-surface px-3 text-base" placeholder="Qty" />
         </div>
-        <input name="description" required placeholder="Description" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500" />
+        <input name="description" required placeholder="Description" class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base placeholder-faint" />
         <div class="grid grid-cols-2 gap-3">
-          <input name="unitPrice" inputmode="decimal" required placeholder="Price each (£)" class="min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 text-base placeholder-stone-500" />
+          <input name="unitPrice" inputmode="decimal" required placeholder="Price each (£)" class="min-h-12 rounded-xl border border-edge-2 bg-surface px-3 text-base placeholder-faint" />
           {showCosts && (
-            <input name="unitCost" inputmode="decimal" placeholder="Your cost (£, private)" class="min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 text-base placeholder-stone-500" />
+            <input name="unitCost" inputmode="decimal" placeholder="Your cost (£, private)" class="min-h-12 rounded-xl border border-edge-2 bg-surface px-3 text-base placeholder-faint" />
           )}
         </div>
-        <button type="submit" class="w-full min-h-12 rounded-xl border border-amber-500 font-semibold text-amber-400 hover:bg-amber-950">+ Add line item</button>
+        <button type="submit" class="w-full min-h-12 rounded-xl border border-accent font-semibold text-accent-text hover:bg-accent-soft">+ Add line item</button>
       </form>
 
-      <div class="rounded-2xl border border-ink-700 bg-ink-900 p-4 text-right">
+      <div class="rounded-2xl border border-edge bg-card p-4 text-right">
         {job.taxCents > 0 && (
-          <p class="text-sm text-stone-400">
+          <p class="text-sm text-dim">
             Subtotal {money(job.subtotalCents)} · VAT {money(job.taxCents)}
           </p>
         )}
         {job.cisReverseCharge && (
-          <p class="text-sm text-stone-400">
+          <p class="text-sm text-dim">
             Reverse charge VAT · CIS deduction −{money(cisCents)}
           </p>
         )}
-        <p class="text-sm text-stone-400">Total</p>
+        <p class="text-sm text-dim">Total</p>
         <p class="text-2xl font-bold">{money(job.totalCents)}</p>
         {showCosts && items.length > 0 && (
-          <p class="mt-1 text-sm text-stone-500">
+          <p class="mt-1 text-sm text-faint">
             Cost {money(totalCostCents)} · Margin <span class={marginCents >= 0 ? 'text-emerald-400' : 'text-red-400'}>{money(marginCents)}</span>
           </p>
         )}
@@ -602,56 +602,56 @@ const balanceCents = Math.max(0, job.totalCents - cisCents - paidSoFarCents);
     </section>
 
     <section class="space-y-2">
-      <h2 class="text-sm font-semibold uppercase tracking-wide text-stone-400">Assigned tech</h2>
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-dim">Assigned tech</h2>
       {isFieldRole ? (
-        <p class="rounded-xl border border-ink-700 bg-ink-900 px-4 py-3 text-stone-300">
+        <p class="rounded-xl border border-edge bg-card px-4 py-3 text-dim">
           {assignedTech ? `${assignedTech.name} (you)` : 'Unassigned'}
         </p>
       ) : (
         <form method="POST" class="flex gap-2">
           <input type="hidden" name="intent" value="assign" />
-          <select name="assignedUserId" class="min-h-12 flex-1 rounded-xl border border-ink-600 bg-ink-900 px-3 text-base">
+          <select name="assignedUserId" class="min-h-12 flex-1 rounded-xl border border-edge-2 bg-card px-3 text-base">
             <option value="">Unassigned</option>
             {team.map((u) => (
               <option value={u.id} selected={u.id === job.assignedUserId}>{u.name} ({u.role})</option>
             ))}
           </select>
-          <button type="submit" class="min-h-12 rounded-xl border border-ink-600 px-4 text-stone-300 hover:border-amber-500">Save</button>
+          <button type="submit" class="min-h-12 rounded-xl border border-edge-2 px-4 text-dim hover:border-accent">Save</button>
         </form>
       )}
     </section>
 
     <section class="space-y-3">
-      <h2 class="text-sm font-semibold uppercase tracking-wide text-stone-400">Photos</h2>
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-dim">Photos</h2>
       {photos.length > 0 && (
         <div class="grid grid-cols-3 gap-2">
           {photos.map((p) => (
             <a href={`/api/app/photos/${p.id}`} target="_blank">
-              <img src={`/api/app/photos/${p.id}`} alt="Job photo" loading="lazy" class="aspect-square w-full rounded-xl border border-ink-700 object-cover" />
+              <img src={`/api/app/photos/${p.id}`} alt="Job photo" loading="lazy" class="aspect-square w-full rounded-xl border border-edge object-cover" />
             </a>
           ))}
         </div>
       )}
       <form method="POST" action={`/api/app/photos?jobId=${jobId}`} enctype="multipart/form-data" class="flex gap-2">
-        <input type="file" name="photo" accept="image/*" capture="environment" required class="min-h-12 flex-1 rounded-xl border border-ink-600 bg-ink-900 px-3 py-2.5 text-sm text-stone-400 file:mr-3 file:rounded-lg file:border-0 file:bg-ink-700 file:px-3 file:py-1.5 file:text-stone-200" />
-        <button type="submit" class="min-h-12 rounded-xl border border-amber-500 px-4 text-sm font-semibold text-amber-400 hover:bg-amber-950">Upload</button>
+        <input type="file" name="photo" accept="image/*" capture="environment" required class="min-h-12 flex-1 rounded-xl border border-edge-2 bg-card px-3 py-2.5 text-sm text-dim file:mr-3 file:rounded-lg file:border-0 file:bg-card-2 file:px-3 file:py-1.5 file:text-body" />
+        <button type="submit" class="min-h-12 rounded-xl border border-accent px-4 text-sm font-semibold text-accent-text hover:bg-accent-soft">Upload</button>
       </form>
     </section>
 
     <section class="space-y-3">
-      <h2 class="text-sm font-semibold uppercase tracking-wide text-stone-400">Certificates & forms</h2>
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-dim">Certificates & forms</h2>
       {certRows.map((c) => (
-        <a href={`/api/app/cert-pdf/${c.id}`} target="_blank" class="flex min-h-14 items-center justify-between gap-3 rounded-xl border border-ink-700 bg-ink-900 px-4 py-2.5 hover:border-amber-500/50">
+        <a href={`/api/app/cert-pdf/${c.id}`} target="_blank" class="flex min-h-14 items-center justify-between gap-3 rounded-xl border border-edge bg-card px-4 py-2.5 hover:border-accent/50">
           <span>
             <span class="block text-sm font-medium">{CERT_LABELS[c.type]}</span>
-            <span class="block text-xs text-stone-400">{c.certNumber} · {c.engineerName} · {fmtDateTz(c.issuedAt, tz)}</span>
+            <span class="block text-xs text-dim">{c.certNumber} · {c.engineerName} · {fmtDateTz(c.issuedAt, tz)}</span>
           </span>
-          <span class="text-sm font-semibold text-amber-400">PDF ⬇</span>
+          <span class="text-sm font-semibold text-accent-text">PDF ⬇</span>
         </a>
       ))}
       <div class="grid grid-cols-2 gap-2">
         {CERT_TYPES.map((t) => (
-          <a href={`/dashboard/jobs/${jobId}/certificate?type=${t}`} class="flex min-h-12 items-center justify-center rounded-xl border border-ink-600 px-2 text-center text-xs font-semibold text-stone-300 hover:border-amber-500">
+          <a href={`/dashboard/jobs/${jobId}/certificate?type=${t}`} class="flex min-h-12 items-center justify-center rounded-xl border border-edge-2 px-2 text-center text-xs font-semibold text-dim hover:border-accent">
             + {CERT_LABELS[t]}
           </a>
         ))}
@@ -659,7 +659,7 @@ const balanceCents = Math.max(0, job.totalCents - cisCents - paidSoFarCents);
     </section>
 
     <section class="space-y-2">
-      <h2 class="text-sm font-semibold uppercase tracking-wide text-stone-400">Time on the job</h2>
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-dim">Time on the job</h2>
       <form method="POST" id="clock-form">
         <input type="hidden" name="intent" value="clock" />
         <input type="hidden" name="lat" id="clock-lat" />
@@ -669,50 +669,50 @@ const balanceCents = Math.max(0, job.totalCents - cisCents - paidSoFarCents);
         </button>
       </form>
       {timeRows.length > 0 && (
-        <div class="rounded-2xl border border-ink-700 bg-ink-900 p-4 text-sm">
+        <div class="rounded-2xl border border-edge bg-card p-4 text-sm">
           {timeRows.slice(0, 5).map((e) => (
-            <p class="text-stone-400">
+            <p class="text-dim">
               {e.userName}: {fmtDateTz(e.startedAt, tz)} → {e.endedAt ? fmtDateTz(e.endedAt, tz) : 'now'} · {hoursOf(e).toFixed(1)}h
             </p>
           ))}
-          <p class="mt-1 font-semibold text-stone-200">Total: {totalHours.toFixed(1)} hours</p>
+          <p class="mt-1 font-semibold text-body">Total: {totalHours.toFixed(1)} hours</p>
         </div>
       )}
     </section>
 
     <section class="space-y-2">
-      <h2 class="text-sm font-semibold uppercase tracking-wide text-stone-400">Expenses</h2>
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-dim">Expenses</h2>
       {expenseRows.map((e) => (
-        <div class="flex items-center justify-between gap-3 rounded-xl border border-ink-700 bg-ink-900 px-4 py-2.5">
+        <div class="flex items-center justify-between gap-3 rounded-xl border border-edge bg-card px-4 py-2.5">
           <p class="min-w-0 truncate text-sm">{e.description}</p>
           <div class="flex items-center gap-2">
             <span class="text-sm font-semibold">{money(e.amountCents)}</span>
             <form method="POST">
               <input type="hidden" name="intent" value="delete-expense" />
               <input type="hidden" name="expenseId" value={e.id} />
-              <button type="submit" class="min-h-12 min-w-10 rounded-lg text-stone-500 hover:text-red-400" aria-label="Delete expense">✕</button>
+              <button type="submit" class="min-h-12 min-w-10 rounded-lg text-faint hover:text-red-400" aria-label="Delete expense">✕</button>
             </form>
           </div>
         </div>
       ))}
       <form method="POST" class="flex gap-2">
         <input type="hidden" name="intent" value="add-expense" />
-        <input name="description" required placeholder="e.g. Parts from Screwfix" class="min-h-12 flex-1 rounded-xl border border-ink-600 bg-ink-900 px-4 text-base placeholder-stone-500" />
-        <input name="amount" inputmode="decimal" required placeholder="£" class="min-h-12 w-24 rounded-xl border border-ink-600 bg-ink-900 px-3 text-base placeholder-stone-500" />
-        <button type="submit" class="min-h-12 rounded-xl border border-amber-500 px-4 text-sm font-semibold text-amber-400 hover:bg-amber-950">Add</button>
+        <input name="description" required placeholder="e.g. Parts from Screwfix" class="min-h-12 flex-1 rounded-xl border border-edge-2 bg-card px-4 text-base placeholder-faint" />
+        <input name="amount" inputmode="decimal" required placeholder="£" class="min-h-12 w-24 rounded-xl border border-edge-2 bg-card px-3 text-base placeholder-faint" />
+        <button type="submit" class="min-h-12 rounded-xl border border-accent px-4 text-sm font-semibold text-accent-text hover:bg-accent-soft">Add</button>
       </form>
     </section>
 
     {showCosts && (
-      <section class="rounded-2xl border border-ink-700 bg-ink-900 p-4">
-        <h2 class="text-sm font-semibold uppercase tracking-wide text-stone-400">Job profit (private)</h2>
-        <div class="mt-2 space-y-1 text-sm text-stone-400">
+      <section class="rounded-2xl border border-edge bg-card p-4">
+        <h2 class="text-sm font-semibold uppercase tracking-wide text-dim">Job profit (private)</h2>
+        <div class="mt-2 space-y-1 text-sm text-dim">
           <p class="flex justify-between"><span>Revenue (ex VAT)</span><span>{money(job.subtotalCents)}</span></p>
           <p class="flex justify-between"><span>Materials cost</span><span>−{money(totalCostCents)}</span></p>
           <p class="flex justify-between"><span>Expenses</span><span>−{money(expensesTotalCents)}</span></p>
           <p class="flex justify-between"><span>Labour ({totalHours.toFixed(1)}h)</span><span>−{money(labourCostCents)}</span></p>
         </div>
-        <p class="mt-2 flex justify-between border-t border-ink-700 pt-2 font-bold">
+        <p class="mt-2 flex justify-between border-t border-edge pt-2 font-bold">
           <span>Profit</span>
           <span class={profitCents >= 0 ? 'text-emerald-400' : 'text-red-400'}>{money(profitCents)}</span>
         </p>
@@ -720,21 +720,21 @@ const balanceCents = Math.max(0, job.totalCents - cisCents - paidSoFarCents);
     )}
 
     <section class="space-y-3">
-      <h2 class="text-sm font-semibold uppercase tracking-wide text-stone-400">Sign on glass</h2>
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-dim">Sign on glass</h2>
       {sigs.map((s) => (
-        <div class="rounded-2xl border border-ink-700 bg-white p-3">
+        <div class="rounded-2xl border border-edge bg-white p-3">
           <img src={s.imageDataUrl} alt={`Signature from ${s.signerName}`} class="mx-auto max-h-28" />
-          <p class="mt-1 text-center text-xs text-stone-600">{s.signerName} — {fmtDateTz(s.signedAt, tz)}</p>
+          <p class="mt-1 text-center text-xs text-faint">{s.signerName} — {fmtDateTz(s.signedAt, tz)}</p>
         </div>
       ))}
-      <form method="POST" id="sig-form" class="space-y-3 rounded-2xl border border-ink-700 bg-ink-900 p-4">
+      <form method="POST" id="sig-form" class="space-y-3 rounded-2xl border border-edge bg-card p-4">
         <input type="hidden" name="intent" value="sign" />
         <input type="hidden" name="imageDataUrl" id="sig-data" />
-        <input name="signerName" required placeholder="Customer name" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500" />
+        <input name="signerName" required placeholder="Customer name" class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base placeholder-faint" />
         <canvas id="sig-pad" width="640" height="200" class="w-full touch-none rounded-xl bg-white"></canvas>
         <div class="flex gap-2">
-          <button type="button" id="sig-clear" class="min-h-12 flex-1 rounded-xl border border-ink-600 text-stone-300">Clear</button>
-          <button type="submit" class="min-h-12 flex-1 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">Save signature</button>
+          <button type="button" id="sig-clear" class="min-h-12 flex-1 rounded-xl border border-edge-2 text-dim">Clear</button>
+          <button type="submit" class="min-h-12 flex-1 rounded-xl bg-primary font-semibold text-white hover:bg-primary-2">Save signature</button>
         </div>
       </form>
     </section>

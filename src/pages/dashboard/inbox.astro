@@ -123,25 +123,25 @@ const threadName = threads.find((t) => t.phone === withPhone)?.name ?? withPhone
     <div class="space-y-4">
       <h1 class="text-xl font-bold">Inbox</h1>
       {!canSend && (
-        <p class="rounded-xl border border-ink-700 bg-ink-900 px-4 py-3 text-sm text-stone-400">
-          Connect Twilio in <a href="/dashboard/settings/messaging" class="text-amber-400 hover:underline">Settings → Messaging</a> and point the number's SMS webhook at <span class="font-mono text-xs">/api/webhooks/twilio-sms</span> to receive replies here.
+        <p class="rounded-xl border border-edge bg-card px-4 py-3 text-sm text-dim">
+          Connect Twilio in <a href="/dashboard/settings/messaging" class="text-accent-text hover:underline">Settings → Messaging</a> and point the number's SMS webhook at <span class="font-mono text-xs">/api/webhooks/twilio-sms</span> to receive replies here.
         </p>
       )}
       {threads.length === 0 ? (
-        <p class="rounded-2xl border border-dashed border-ink-600 p-8 text-center text-sm text-stone-500">
+        <p class="rounded-2xl border border-dashed border-edge-2 p-8 text-center text-sm text-faint">
           No messages yet. Reminders, text-backs, and customer replies all land here.
         </p>
       ) : (
         <div class="space-y-2">
           {threads.map((t) => (
-            <a href={`/dashboard/inbox?with=${encodeURIComponent(t.phone)}`} class="flex min-h-16 items-center justify-between gap-3 rounded-2xl border border-ink-700 bg-ink-900 px-4 py-3 hover:border-amber-500/50">
+            <a href={`/dashboard/inbox?with=${encodeURIComponent(t.phone)}`} class="flex min-h-16 items-center justify-between gap-3 rounded-2xl border border-edge bg-card px-4 py-3 hover:border-accent/50">
               <div class="min-w-0">
                 <p class="font-medium">{t.kind === 'email' ? '✉️' : '💬'} {t.name ?? t.phone}</p>
-                <p class="truncate text-sm text-stone-400">{t.last}</p>
+                <p class="truncate text-sm text-dim">{t.last}</p>
               </div>
               <div class="flex shrink-0 items-center gap-2">
-                {t.unread > 0 && <span class="rounded-full bg-orange-600 px-2 py-0.5 text-xs font-bold text-white">{t.unread}</span>}
-                <span class="text-xs text-stone-500">{fmtDateTz(t.when, tz)}</span>
+                {t.unread > 0 && <span class="rounded-full bg-primary px-2 py-0.5 text-xs font-bold text-white">{t.unread}</span>}
+                <span class="text-xs text-faint">{fmtDateTz(t.when, tz)}</span>
               </div>
             </a>
           ))}
@@ -151,26 +151,26 @@ const threadName = threads.find((t) => t.phone === withPhone)?.name ?? withPhone
   ) : (
     <div class="flex min-h-[70vh] flex-col space-y-4">
       <div>
-        <a href="/dashboard/inbox" class="text-sm text-stone-400 hover:text-stone-200">← Inbox</a>
+        <a href="/dashboard/inbox" class="text-sm text-dim hover:text-body">← Inbox</a>
         <div class="mt-1 flex items-center justify-between">
           <h1 class="text-xl font-bold">{threadName}</h1>
-          <a href={`tel:${withPhone}`} class="flex min-h-12 items-center rounded-xl border border-ink-600 px-4 text-sm text-stone-300 hover:border-amber-500">📞 Call</a>
+          <a href={`tel:${withPhone}`} class="flex min-h-12 items-center rounded-xl border border-edge-2 px-4 text-sm text-dim hover:border-accent">📞 Call</a>
         </div>
       </div>
       <div class="flex-1 space-y-2 overflow-y-auto">
         {thread.map((m) => (
-          <div class={`max-w-[85%] rounded-2xl px-4 py-2.5 ${m.direction === 'out' ? 'ml-auto bg-orange-600 text-white' : 'bg-ink-800 text-stone-100'}`}>
+          <div class={`max-w-[85%] rounded-2xl px-4 py-2.5 ${m.direction === 'out' ? 'ml-auto bg-primary text-white' : 'bg-card-2 text-body'}`}>
             {m.kind === 'email' && m.subject && <p class="text-xs font-bold">✉️ {m.subject}</p>}
             <p class="whitespace-pre-wrap text-sm">{m.body}</p>
-            <p class={`mt-1 text-[10px] ${m.direction === 'out' ? 'text-white/70' : 'text-stone-500'}`}>{fmtDateTz(m.createdAt, tz)}</p>
+            <p class={`mt-1 text-[10px] ${m.direction === 'out' ? 'text-white/70' : 'text-faint'}`}>{fmtDateTz(m.createdAt, tz)}</p>
           </div>
         ))}
       </div>
       {sendError && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{sendError}</p>}
       <form method="POST" class="flex gap-2">
-        <input name="body" id="reply-body" required placeholder="Type a reply…" autocomplete="off" class="min-h-12 flex-1 rounded-xl border border-ink-600 bg-ink-900 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
-        <button type="button" id="ai-draft" title="Draft a reply with AI" class="min-h-12 rounded-xl border border-ink-600 px-3 text-lg hover:border-amber-500">✨</button>
-        <button type="submit" class="min-h-12 rounded-xl bg-orange-600 px-5 font-semibold text-white hover:bg-orange-500">Send</button>
+        <input name="body" id="reply-body" required placeholder="Type a reply…" autocomplete="off" class="min-h-12 flex-1 rounded-xl border border-edge-2 bg-card px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
+        <button type="button" id="ai-draft" title="Draft a reply with AI" class="min-h-12 rounded-xl border border-edge-2 px-3 text-lg hover:border-accent">✨</button>
+        <button type="submit" class="min-h-12 rounded-xl bg-primary px-5 font-semibold text-white hover:bg-primary-2">Send</button>
       </form>
     </div>
   )}

@@ -69,19 +69,19 @@ const team = await db.select().from(users).where(tenantWhere(users, tenantId)).o
 <AppShell title="Team" active="settings">
   <div class="mx-auto max-w-xl space-y-5">
     <div>
-      <a href="/dashboard/settings" class="text-sm text-stone-400 hover:text-stone-200">← Settings</a>
+      <a href="/dashboard/settings" class="text-sm text-dim hover:text-body">← Settings</a>
       <h2 class="mt-1 text-2xl font-bold">Team</h2>
-      <p class="text-sm text-stone-400">Techs and apprentices never see costs or margins.</p>
+      <p class="text-sm text-dim">Techs and apprentices never see costs or margins.</p>
     </div>
     {notice && <p class="rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300">{notice}</p>}
     {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
 
     <div class="space-y-2">
       {team.map((u) => (
-        <div class="flex items-center justify-between gap-3 rounded-2xl border border-ink-700 bg-ink-900 px-4 py-3">
+        <div class="flex items-center justify-between gap-3 rounded-2xl border border-edge bg-card px-4 py-3">
           <div>
-            <p class={`font-medium ${u.isActive ? '' : 'line-through text-stone-500'}`}>{u.name}</p>
-            <p class="text-sm text-stone-400">
+            <p class={`font-medium ${u.isActive ? '' : 'line-through text-faint'}`}>{u.name}</p>
+            <p class="text-sm text-dim">
               {u.email} · {u.role}
               {u.hourlyCostCents != null && ` · ${fmtMoney(u.hourlyCostCents)}/hr cost`}
             </p>
@@ -90,27 +90,27 @@ const team = await db.select().from(users).where(tenantWhere(users, tenantId)).o
             <form method="POST">
               <input type="hidden" name="intent" value="deactivate-user" />
               <input type="hidden" name="userId" value={u.id} />
-              <button type="submit" class="min-h-12 rounded-lg px-3 text-sm text-stone-500 hover:text-red-400">Deactivate</button>
+              <button type="submit" class="min-h-12 rounded-lg px-3 text-sm text-faint hover:text-red-400">Deactivate</button>
             </form>
           )}
         </div>
       ))}
     </div>
 
-    <details class="rounded-2xl border border-ink-700 bg-ink-900">
-      <summary class="flex min-h-12 cursor-pointer items-center px-4 text-sm font-semibold text-amber-400">+ Add team member</summary>
-      <form method="POST" class="space-y-3 border-t border-ink-700 p-4">
+    <details class="rounded-2xl border border-edge bg-card">
+      <summary class="flex min-h-12 cursor-pointer items-center px-4 text-sm font-semibold text-accent-text">+ Add team member</summary>
+      <form method="POST" class="space-y-3 border-t border-edge p-4">
         <input type="hidden" name="intent" value="add-user" />
-        <input name="name" required placeholder="Name" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
-        <input name="email" type="email" required placeholder="Email" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
-        <input name="password" type="password" required minlength="8" placeholder="Temp password (8+)" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
-        <input name="hourlyCost" inputmode="decimal" placeholder="Hourly cost (£/hr, private — optional)" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
-        <select name="role" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none">
+        <input name="name" required placeholder="Name" class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
+        <input name="email" type="email" required placeholder="Email" class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
+        <input name="password" type="password" required minlength="8" placeholder="Temp password (8+)" class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
+        <input name="hourlyCost" inputmode="decimal" placeholder="Hourly cost (£/hr, private — optional)" class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
+        <select name="role" class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base focus:border-accent focus:outline-none">
           <option value="technician">Technician (costs hidden)</option>
           <option value="apprentice">Apprentice (costs hidden)</option>
           <option value="admin">Admin (full financials)</option>
         </select>
-        <button type="submit" class="w-full min-h-12 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">Add member</button>
+        <button type="submit" class="w-full min-h-12 rounded-xl bg-primary font-semibold text-white hover:bg-primary-2">Add member</button>
       </form>
     </details>
   </div>

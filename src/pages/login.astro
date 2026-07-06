@@ -1,5 +1,6 @@
 ---
 import '../styles/global.css';
+import ThemeInit from '../components/ThemeInit.astro';
 import { env } from 'cloudflare:workers';
 import { eq } from 'drizzle-orm';
 import { createDb } from '../db';
@@ -37,38 +38,39 @@ if (Astro.request.method === 'POST') {
 }
 ---
 
-<html lang="en">
+<html lang="en" data-app>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <ThemeInit />
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" href="/icons/favicon.png" type="image/png" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <title>Log in · Pocket Ops</title>
   </head>
-  <body class="min-h-screen bg-ink-950 text-stone-100 flex items-center justify-center p-4">
+  <body class="min-h-screen bg-surface text-body flex items-center justify-center p-4">
     <main class="w-full max-w-sm space-y-6">
       <div class="text-center">
         <img src="/icons/icon-192.png" alt="Pocket Ops" class="mx-auto h-16 w-16 rounded-2xl bg-white object-cover shadow-lg" />
         <h1 class="mt-3 text-2xl font-bold">Pocket Ops</h1>
-        <p class="mt-1 text-stone-400">Log in to your workspace</p>
+        <p class="mt-1 text-dim">Log in to your workspace</p>
       </div>
       {error && <p class="rounded-lg bg-red-950 border border-red-800 px-4 py-3 text-sm text-red-300">{error}</p>}
       <form method="POST" class="space-y-4">
-        <input name="email" type="email" required placeholder="Email" autocomplete="email" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-900 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
-        <input name="password" type="password" required placeholder="Password" autocomplete="current-password" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-900 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
-        <button type="submit" class="w-full min-h-12 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">
+        <input name="email" type="email" required placeholder="Email" autocomplete="email" class="w-full min-h-12 rounded-xl border border-edge-2 bg-card px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
+        <input name="password" type="password" required placeholder="Password" autocomplete="current-password" class="w-full min-h-12 rounded-xl border border-edge-2 bg-card px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
+        <button type="submit" class="w-full min-h-12 rounded-xl bg-primary font-semibold text-white hover:bg-primary-2">
           Log in
         </button>
       </form>
       <p class="text-center text-sm">
-        <a href="/forgot-password" class="text-amber-400 hover:underline">Forgot password?</a>
+        <a href="/forgot-password" class="text-accent-text hover:underline">Forgot password?</a>
       </p>
-      <p class="text-center text-sm text-stone-400">
-        New here? <a href="/signup" class="text-amber-400 hover:underline">Create a workspace</a>
+      <p class="text-center text-sm text-dim">
+        New here? <a href="/signup" class="text-accent-text hover:underline">Create a workspace</a>
       </p>
-      <p class="text-center text-xs text-stone-600">
-        <a href="/privacy" class="hover:text-stone-400">Privacy</a> · <a href="/terms" class="hover:text-stone-400">Terms</a>
+      <p class="text-center text-xs text-faint">
+        <a href="/privacy" class="hover:text-dim">Privacy</a> · <a href="/terms" class="hover:text-dim">Terms</a>
       </p>
     </main>
   </body>

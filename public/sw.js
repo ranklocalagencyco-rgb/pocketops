@@ -3,7 +3,7 @@
  * Techs in basements/dead zones still see the last-good copy of their
  * dashboard, job list, and job detail pages.
  */
-const CACHE = 'pocketops-v4';
+const CACHE = 'pocketops-v5';
 const PRECACHE = ['/dashboard', '/manifest.json', '/icons/icon-192.png'];
 
 self.addEventListener('install', (event) => {

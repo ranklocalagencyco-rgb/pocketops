@@ -50,19 +50,19 @@ const disconnectedFlash = Astro.url.searchParams.get('disconnected');
 <AppShell title="Accounting Sync" active="settings">
   <div class="mx-auto max-w-xl space-y-5">
     <div>
-      <a href="/dashboard/settings" class="text-sm text-stone-400 hover:text-stone-200">← Settings</a>
+      <a href="/dashboard/settings" class="text-sm text-dim hover:text-body">← Settings</a>
       <h2 class="mt-1 text-2xl font-bold">Accounting Sync</h2>
-      <p class="text-sm text-stone-400">Paid invoices push into your ledger automatically.</p>
+      <p class="text-sm text-dim">Paid invoices push into your ledger automatically.</p>
     </div>
     {connectedFlash && <p class="rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300">{connectedFlash} connected.</p>}
-    {disconnectedFlash && <p class="rounded-lg border border-ink-700 bg-ink-900 px-4 py-3 text-sm text-stone-300">{disconnectedFlash} disconnected — its access has been revoked.</p>}
+    {disconnectedFlash && <p class="rounded-lg border border-edge bg-card px-4 py-3 text-sm text-dim">{disconnectedFlash} disconnected — its access has been revoked.</p>}
 
     <div class="space-y-2">
       {providers.map((p) => (
-        <div class="flex items-center justify-between gap-3 rounded-2xl border border-ink-700 bg-ink-900 px-4 py-3">
+        <div class="flex items-center justify-between gap-3 rounded-2xl border border-edge bg-card px-4 py-3">
           <div>
             <p class="font-medium">{p.label}</p>
-            <p class="text-sm text-stone-400">
+            <p class="text-sm text-dim">
               {p.connection?.status === 'active'
                 ? 'Connected — paid invoices sync automatically'
                 : p.configured
@@ -71,13 +71,13 @@ const disconnectedFlash = Astro.url.searchParams.get('disconnected');
             </p>
           </div>
           {p.configured && p.connection?.status !== 'active' && (
-            <a href={`/api/integrations/${p.id}/connect`} class="flex min-h-12 items-center rounded-xl border border-amber-500 px-4 text-sm font-semibold text-amber-400 hover:bg-amber-950">Connect</a>
+            <a href={`/api/integrations/${p.id}/connect`} class="flex min-h-12 items-center rounded-xl border border-accent px-4 text-sm font-semibold text-accent-text hover:bg-accent-soft">Connect</a>
           )}
           {p.connection?.status === 'active' && (
             <div class="flex items-center gap-3">
               <span class="text-emerald-400">●</span>
               <form method="POST" action={`/api/integrations/${p.id}/disconnect`}>
-                <button type="submit" class="flex min-h-10 items-center rounded-lg border border-ink-600 px-3 text-xs text-stone-400 hover:border-red-800 hover:text-red-300">Disconnect</button>
+                <button type="submit" class="flex min-h-10 items-center rounded-lg border border-edge-2 px-3 text-xs text-dim hover:border-red-800 hover:text-red-300">Disconnect</button>
               </form>
             </div>
           )}
@@ -85,14 +85,14 @@ const disconnectedFlash = Astro.url.searchParams.get('disconnected');
       ))}
     </div>
 
-    <div class="rounded-2xl border border-ink-700 bg-ink-900 p-5">
+    <div class="rounded-2xl border border-edge bg-card p-5">
       <p class="font-semibold">Sync history</p>
       {history.length === 0 ? (
-        <p class="mt-2 text-sm text-stone-500">Nothing synced yet — history appears after the first paid invoice.</p>
+        <p class="mt-2 text-sm text-faint">Nothing synced yet — history appears after the first paid invoice.</p>
       ) : (
         <div class="mt-2 space-y-1.5 text-sm">
           {history.map((r) => (
-            <p class={r.status === 'error' ? 'text-red-300' : 'text-stone-400'}>
+            <p class={r.status === 'error' ? 'text-red-300' : 'text-dim'}>
               {r.status === 'synced' ? '✓' : r.status === 'error' ? '✕' : '…'} {r.jobTitle} — {r.status === 'synced' ? `ledger id ${r.externalId}` : r.error ?? 'pending'} · {fmtDateTz(r.createdAt, tenant?.timezone)}
             </p>
           ))}

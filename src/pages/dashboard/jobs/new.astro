@@ -60,30 +60,30 @@ const customerList = await db
     <h1 class="text-xl font-bold">New job</h1>
     {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
     {customerList.length === 0 ? (
-      <p class="rounded-2xl border border-dashed border-ink-600 p-6 text-center text-stone-400">
-        Add a customer first. <a href="/dashboard/customers" class="text-amber-400 hover:underline">Go to customers →</a>
+      <p class="rounded-2xl border border-dashed border-edge-2 p-6 text-center text-dim">
+        Add a customer first. <a href="/dashboard/customers" class="text-accent-text hover:underline">Go to customers →</a>
       </p>
     ) : (
       <form method="POST" class="space-y-4">
         <label class="block space-y-1">
-          <span class="text-sm text-stone-400">Customer</span>
-          <select name="customerId" required class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-900 px-4 text-base focus:border-amber-500 focus:outline-none">
+          <span class="text-sm text-dim">Customer</span>
+          <select name="customerId" required class="w-full min-h-12 rounded-xl border border-edge-2 bg-card px-4 text-base focus:border-accent focus:outline-none">
             {customerList.map((c) => <option value={c.id}>{c.name}</option>)}
           </select>
         </label>
         <label class="block space-y-1">
-          <span class="text-sm text-stone-400">Job title</span>
-          <input name="title" required placeholder="e.g. Replace water heater" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-900 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+          <span class="text-sm text-dim">Job title</span>
+          <input name="title" required placeholder="e.g. Replace water heater" class="w-full min-h-12 rounded-xl border border-edge-2 bg-card px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
         </label>
         <label class="block space-y-1">
-          <span class="text-sm text-stone-400">Details (optional)</span>
-          <textarea name="description" rows="3" class="w-full rounded-xl border border-ink-600 bg-ink-900 px-4 py-3 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none"></textarea>
+          <span class="text-sm text-dim">Details (optional)</span>
+          <textarea name="description" rows="3" class="w-full rounded-xl border border-edge-2 bg-card px-4 py-3 text-base placeholder-faint focus:border-accent focus:outline-none"></textarea>
         </label>
         <label class="block space-y-1">
-          <span class="text-sm text-stone-400">Scheduled for (optional)</span>
-          <input name="scheduledAt" type="datetime-local" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-900 px-4 text-base focus:border-amber-500 focus:outline-none" />
+          <span class="text-sm text-dim">Scheduled for (optional)</span>
+          <input name="scheduledAt" type="datetime-local" class="w-full min-h-12 rounded-xl border border-edge-2 bg-card px-4 text-base focus:border-accent focus:outline-none" />
         </label>
-        <button type="submit" class="w-full min-h-12 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">Create job</button>
+        <button type="submit" class="w-full min-h-12 rounded-xl bg-primary font-semibold text-white hover:bg-primary-2">Create job</button>
       </form>
     )}
   </div>

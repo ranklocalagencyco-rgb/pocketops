@@ -92,74 +92,74 @@ const logoSrc = tenant?.logoR2Key ? `/logo/${tenant.slug}?v=${tenant.logoR2Key.s
 <AppShell title="Business" active="settings">
   <div class="mx-auto max-w-xl space-y-5">
     <div>
-      <a href="/dashboard/settings" class="text-sm text-stone-400 hover:text-stone-200">← Settings</a>
+      <a href="/dashboard/settings" class="text-sm text-dim hover:text-body">← Settings</a>
       <h2 class="mt-1 text-2xl font-bold">Business</h2>
-      <p class="text-sm text-stone-400">Your letterhead — shown on quotes, invoices, and payment pages.</p>
+      <p class="text-sm text-dim">Your letterhead — shown on quotes, invoices, and payment pages.</p>
     </div>
     {notice && <p class="rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300">{notice}</p>}
     {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
 
-    <form method="POST" enctype="multipart/form-data" class="space-y-4 rounded-2xl border border-ink-700 bg-ink-900 p-5">
+    <form method="POST" enctype="multipart/form-data" class="space-y-4 rounded-2xl border border-edge bg-card p-5">
       <label class="block space-y-1">
-        <span class="text-sm text-stone-400">Business name</span>
-        <input name="name" value={tenant?.name} required class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none" />
+        <span class="text-sm text-dim">Business name</span>
+        <input name="name" value={tenant?.name} required class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base focus:border-accent focus:outline-none" />
       </label>
 
-      <div class="space-y-2 rounded-xl border border-ink-700 bg-ink-950 p-4">
-        <span class="text-sm font-semibold text-stone-200">Company logo</span>
+      <div class="space-y-2 rounded-xl border border-edge bg-surface p-4">
+        <span class="text-sm font-semibold text-body">Company logo</span>
         {logoSrc ? (
           <div class="flex items-center gap-4">
             <img src={logoSrc} alt="Current logo" class="h-16 w-auto max-w-[160px] rounded-lg bg-white object-contain p-1" />
-            <label class="flex items-center gap-2 text-sm text-stone-400">
+            <label class="flex items-center gap-2 text-sm text-dim">
               <input type="checkbox" name="removeLogo" value="1" class="h-4 w-4 accent-orange-600" />
               Remove logo
             </label>
           </div>
         ) : (
-          <p class="text-sm text-stone-500">No logo yet — add one and it appears at the top of your invoices and payment pages.</p>
+          <p class="text-sm text-faint">No logo yet — add one and it appears at the top of your invoices and payment pages.</p>
         )}
-        <input type="file" name="logo" accept="image/png,image/jpeg" class="w-full text-sm text-stone-400 file:mr-3 file:min-h-10 file:rounded-lg file:border-0 file:bg-ink-800 file:px-4 file:text-sm file:font-semibold file:text-stone-200" />
-        <p class="text-xs text-stone-500">PNG or JPEG, up to 2MB. A logo on a white or transparent background prints best.</p>
+        <input type="file" name="logo" accept="image/png,image/jpeg" class="w-full text-sm text-dim file:mr-3 file:min-h-10 file:rounded-lg file:border-0 file:bg-card-2 file:px-4 file:text-sm file:font-semibold file:text-body" />
+        <p class="text-xs text-faint">PNG or JPEG, up to 2MB. A logo on a white or transparent background prints best.</p>
       </div>
 
       <div class="grid gap-4 sm:grid-cols-2">
         <label class="block space-y-1 sm:col-span-2">
-          <span class="text-sm text-stone-400">Address line 1</span>
-          <input name="addressLine1" value={tenant?.addressLine1 ?? ''} placeholder="Unit 4, Trade Park" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-600 focus:border-amber-500 focus:outline-none" />
+          <span class="text-sm text-dim">Address line 1</span>
+          <input name="addressLine1" value={tenant?.addressLine1 ?? ''} placeholder="Unit 4, Trade Park" class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
         </label>
         <label class="block space-y-1 sm:col-span-2">
-          <span class="text-sm text-stone-400">Address line 2</span>
-          <input name="addressLine2" value={tenant?.addressLine2 ?? ''} class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none" />
+          <span class="text-sm text-dim">Address line 2</span>
+          <input name="addressLine2" value={tenant?.addressLine2 ?? ''} class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base focus:border-accent focus:outline-none" />
         </label>
         <label class="block space-y-1">
-          <span class="text-sm text-stone-400">Town / City</span>
-          <input name="city" value={tenant?.city ?? ''} class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none" />
+          <span class="text-sm text-dim">Town / City</span>
+          <input name="city" value={tenant?.city ?? ''} class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base focus:border-accent focus:outline-none" />
         </label>
         <label class="block space-y-1">
-          <span class="text-sm text-stone-400">County</span>
-          <input name="region" value={tenant?.region ?? ''} class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none" />
+          <span class="text-sm text-dim">County</span>
+          <input name="region" value={tenant?.region ?? ''} class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base focus:border-accent focus:outline-none" />
         </label>
         <label class="block space-y-1">
-          <span class="text-sm text-stone-400">Postcode</span>
-          <input name="postalCode" value={tenant?.postalCode ?? ''} placeholder="SW1A 1AA" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base uppercase placeholder-stone-600 focus:border-amber-500 focus:outline-none" />
+          <span class="text-sm text-dim">Postcode</span>
+          <input name="postalCode" value={tenant?.postalCode ?? ''} placeholder="SW1A 1AA" class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base uppercase placeholder-faint focus:border-accent focus:outline-none" />
         </label>
       </div>
 
       <label class="block space-y-1">
-        <span class="text-sm text-stone-400">Office phone</span>
-        <input name="phone" type="tel" value={tenant?.phone ?? ''} class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none" />
+        <span class="text-sm text-dim">Office phone</span>
+        <input name="phone" type="tel" value={tenant?.phone ?? ''} class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base focus:border-accent focus:outline-none" />
       </label>
       <label class="block space-y-1">
-        <span class="text-sm text-stone-400">Business email</span>
-        <input name="email" type="email" value={tenant?.email ?? ''} class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base focus:border-amber-500 focus:outline-none" />
+        <span class="text-sm text-dim">Business email</span>
+        <input name="email" type="email" value={tenant?.email ?? ''} class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base focus:border-accent focus:outline-none" />
       </label>
-      <button type="submit" class="w-full min-h-12 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">Save changes</button>
+      <button type="submit" class="w-full min-h-12 rounded-xl bg-primary font-semibold text-white hover:bg-primary-2">Save changes</button>
     </form>
 
-    <div class="rounded-2xl border border-ink-700 bg-ink-900 p-5">
+    <div class="rounded-2xl border border-edge bg-card p-5">
       <p class="font-semibold">Your booking page</p>
-      <p class="mt-1 text-sm text-stone-400">Share this link on your website, Google Business Profile, or social media — requests land in your pipeline as leads.</p>
-      <input readonly value={`${Astro.url.origin}/book/${tenant?.slug}`} onclick="this.select()" class="mt-2 w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 font-mono text-xs text-amber-300" />
+      <p class="mt-1 text-sm text-dim">Share this link on your website, Google Business Profile, or social media — requests land in your pipeline as leads.</p>
+      <input readonly value={`${Astro.url.origin}/book/${tenant?.slug}`} onclick="this.select()" class="mt-2 w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-3 font-mono text-xs text-accent-text" />
     </div>
   </div>
 </AppShell>

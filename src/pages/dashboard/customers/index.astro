@@ -57,46 +57,46 @@ const list = await db
   <div class="space-y-6">
     <h1 class="text-xl font-bold">Customers</h1>
 
-    <details class="rounded-2xl border border-ink-700 bg-ink-900" open={list.length === 0}>
-      <summary class="flex min-h-12 cursor-pointer items-center px-4 font-semibold text-amber-400">+ Add customer</summary>
-      <form method="POST" class="space-y-3 border-t border-ink-700 p-4">
+    <details class="rounded-2xl border border-edge bg-card" open={list.length === 0}>
+      <summary class="flex min-h-12 cursor-pointer items-center px-4 font-semibold text-accent-text">+ Add customer</summary>
+      <form method="POST" class="space-y-3 border-t border-edge p-4">
         {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
         {saved && <p class="rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300">Customer saved.</p>}
-        <input name="name" required placeholder="Full name *" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+        <input name="name" required placeholder="Full name *" class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
         <div class="grid grid-cols-2 gap-3">
-          <input name="phone" type="tel" placeholder="Mobile (+447700900123)" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
-          <input name="email" type="email" placeholder="Email" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+          <input name="phone" type="tel" placeholder="Mobile (+447700900123)" class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
+          <input name="email" type="email" placeholder="Email" class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
         </div>
-        <input name="addressLine1" placeholder="Street address" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+        <input name="addressLine1" placeholder="Street address" class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
         <div class="grid grid-cols-3 gap-3">
-          <input name="city" placeholder="Town / City" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
-          <input name="region" placeholder="County" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
-          <input name="postalCode" placeholder="Postcode" class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
+          <input name="city" placeholder="Town / City" class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
+          <input name="region" placeholder="County" class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
+          <input name="postalCode" placeholder="Postcode" class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
         </div>
-        <button type="submit" class="w-full min-h-12 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">Save customer</button>
+        <button type="submit" class="w-full min-h-12 rounded-xl bg-primary font-semibold text-white hover:bg-primary-2">Save customer</button>
       </form>
     </details>
 
     {list.length === 0 && (
-      <p class="rounded-2xl border border-dashed border-ink-600 p-8 text-center text-stone-500">No customers yet.</p>
+      <p class="rounded-2xl border border-dashed border-edge-2 p-8 text-center text-faint">No customers yet.</p>
     )}
     <div class="space-y-2">
       {list.map((c) => (
-        <div class="rounded-2xl border border-ink-700 bg-ink-900 px-4 py-3">
+        <div class="rounded-2xl border border-edge bg-card px-4 py-3">
           <p class="font-medium">{c.name}</p>
-          <p class="text-sm text-stone-400">
+          <p class="text-sm text-dim">
             {[c.phone, c.email].filter(Boolean).join(' · ') || 'No contact info'}
           </p>
           {c.addressLine1 && (
-            <p class="text-sm text-stone-500">{[c.addressLine1, c.city, c.region].filter(Boolean).join(', ')}</p>
+            <p class="text-sm text-faint">{[c.addressLine1, c.city, c.region].filter(Boolean).join(', ')}</p>
           )}
           {c.portalToken ? (
-            <input readonly value={`${Astro.url.origin}/hub/${c.portalToken}`} onclick="this.select()" class="mt-2 w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-3 font-mono text-xs text-amber-300" />
+            <input readonly value={`${Astro.url.origin}/hub/${c.portalToken}`} onclick="this.select()" class="mt-2 w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-3 font-mono text-xs text-accent-text" />
           ) : (
             <form method="POST" class="mt-2">
               <input type="hidden" name="intent" value="portal-link" />
               <input type="hidden" name="customerId" value={c.id} />
-              <button type="submit" class="min-h-12 rounded-xl border border-ink-600 px-4 text-sm text-stone-300 hover:border-amber-500">🔗 Create client hub link</button>
+              <button type="submit" class="min-h-12 rounded-xl border border-edge-2 px-4 text-sm text-dim hover:border-accent">🔗 Create client hub link</button>
             </form>
           )}
         </div>

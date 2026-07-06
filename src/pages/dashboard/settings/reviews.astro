@@ -47,31 +47,31 @@ const recent = await db
 <AppShell title="Reviews" active="settings">
   <div class="mx-auto max-w-xl space-y-5">
     <div>
-      <a href="/dashboard/settings" class="text-sm text-stone-400 hover:text-stone-200">← Settings</a>
+      <a href="/dashboard/settings" class="text-sm text-dim hover:text-body">← Settings</a>
       <h2 class="mt-1 text-2xl font-bold">Reviews</h2>
-      <p class="text-sm text-stone-400">The moment a customer pays, they get a text asking for a review.</p>
+      <p class="text-sm text-dim">The moment a customer pays, they get a text asking for a review.</p>
     </div>
     {notice && <p class="rounded-lg border border-emerald-800 bg-emerald-950 px-4 py-3 text-sm text-emerald-300">{notice}</p>}
     {error && <p class="rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">{error}</p>}
 
-    <form method="POST" class="space-y-4 rounded-2xl border border-ink-700 bg-ink-900 p-5">
+    <form method="POST" class="space-y-4 rounded-2xl border border-edge bg-card p-5">
       <label class="block space-y-1">
-        <span class="text-sm text-stone-400">Review link</span>
-        <input name="reviewLinkUrl" type="url" value={tenant?.reviewLinkUrl ?? ''} placeholder="https://g.page/r/..." class="w-full min-h-12 rounded-xl border border-ink-600 bg-ink-950 px-4 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none" />
-        <span class="block text-xs text-stone-500">Your Google Business review link works best. Leave blank to turn review texts off.</span>
+        <span class="text-sm text-dim">Review link</span>
+        <input name="reviewLinkUrl" type="url" value={tenant?.reviewLinkUrl ?? ''} placeholder="https://g.page/r/..." class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
+        <span class="block text-xs text-faint">Your Google Business review link works best. Leave blank to turn review texts off.</span>
       </label>
       <label class="block space-y-1">
-        <span class="text-sm text-stone-400">Review message</span>
-        <textarea name="reviewMessage" rows="3" placeholder={`Thanks for choosing ${tenant?.name}! If we did a great job, a quick review means the world to us: {link}`} class="w-full rounded-xl border border-ink-600 bg-ink-950 px-4 py-3 text-base placeholder-stone-500 focus:border-amber-500 focus:outline-none">{tenant?.reviewMessage ?? ''}</textarea>
-        <span class="block text-xs text-stone-500">Use {'{name}'} for the customer's first name and {'{link}'} for the review link. Leave blank for the default.</span>
+        <span class="text-sm text-dim">Review message</span>
+        <textarea name="reviewMessage" rows="3" placeholder={`Thanks for choosing ${tenant?.name}! If we did a great job, a quick review means the world to us: {link}`} class="w-full rounded-xl border border-edge-2 bg-surface px-4 py-3 text-base placeholder-faint focus:border-accent focus:outline-none">{tenant?.reviewMessage ?? ''}</textarea>
+        <span class="block text-xs text-faint">Use {'{name}'} for the customer's first name and {'{link}'} for the review link. Leave blank for the default.</span>
       </label>
-      <button type="submit" class="w-full min-h-12 rounded-xl bg-orange-600 font-semibold text-white hover:bg-orange-500">Save changes</button>
+      <button type="submit" class="w-full min-h-12 rounded-xl bg-primary font-semibold text-white hover:bg-primary-2">Save changes</button>
     </form>
 
     {recent.length > 0 && (
-      <div class="rounded-2xl border border-ink-700 bg-ink-900 p-5">
+      <div class="rounded-2xl border border-edge bg-card p-5">
         <p class="font-semibold">Recent requests</p>
-        <div class="mt-2 space-y-1 text-sm text-stone-400">
+        <div class="mt-2 space-y-1 text-sm text-dim">
           {recent.map((r) => (
             <p>
               {r.sentAt ? '✓' : '…'} {r.customerName} — {fmtDateTz(r.sentAt ?? r.createdAt, tenant?.timezone)}

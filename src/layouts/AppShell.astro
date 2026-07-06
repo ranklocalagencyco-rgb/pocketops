@@ -1,5 +1,6 @@
 ---
 import '../styles/global.css';
+import ThemeInit from '../components/ThemeInit.astro';
 import { env } from 'cloudflare:workers';
 import { eq, isNull } from 'drizzle-orm';
 import { createDb, tenantWhere } from '../db';
@@ -49,28 +50,29 @@ const adminNav = [
 
 const itemClass = (id: string) =>
   `flex min-h-12 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors ${
-    active === id ? 'bg-ink-800 text-white' : 'text-stone-400 hover:bg-ink-900 hover:text-stone-100'
+    active === id ? 'bg-shell-3 text-white' : 'text-shell-text hover:bg-shell-2 hover:text-white'
   }`;
 ---
 
-<html lang="en">
+<html lang="en" data-app>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#151210" />
+    <meta name="theme-color" content="#f4f6f9" />
+    <ThemeInit />
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" href="/icons/favicon.png" type="image/png" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <title>{title} · Pocket Ops</title>
   </head>
-  <body class="min-h-screen bg-ink-950 text-stone-100 pb-24 lg:pb-10">
+  <body class="min-h-screen bg-surface text-body pb-24 lg:pb-10">
     <!-- Sidebar (desktop) -->
-    <aside class="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-ink-700 bg-ink-950 lg:flex">
+    <aside class="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-shell-edge bg-shell lg:flex">
       <a href="/dashboard" class="flex items-center gap-3 px-5 py-5">
         <img src="/icons/icon-192.png" alt="Pocket Ops" class="h-10 w-10 rounded-xl bg-white object-cover" />
         <span class="min-w-0">
-          <span class="block text-sm font-bold tracking-widest">POCKET OPS</span>
-          <span class="block truncate text-[11px] uppercase tracking-wider text-stone-500">{tenant?.name}</span>
+          <span class="block text-sm font-bold tracking-widest text-white">POCKET OPS</span>
+          <span class="block truncate text-[11px] uppercase tracking-wider text-shell-dim">{tenant?.name}</span>
         </span>
       </a>
       <nav class="flex-1 space-y-1 overflow-y-auto px-3 pt-2">
@@ -81,11 +83,11 @@ const itemClass = (id: string) =>
             </svg>
             {item.label}
             {item.id === 'inbox' && unread > 0 && (
-              <span class="ml-auto rounded-full bg-orange-600 px-2 py-0.5 text-xs font-bold text-white">{unread}</span>
+              <span class="ml-auto rounded-full bg-accent px-2 py-0.5 text-xs font-bold text-white">{unread}</span>
             )}
           </a>
         ))}
-        <p class="px-3 pb-1 pt-5 text-[11px] font-semibold uppercase tracking-widest text-stone-600">Admin</p>
+        <p class="px-3 pb-1 pt-5 text-[11px] font-semibold uppercase tracking-widest text-shell-dim">Admin</p>
         {adminNav.map((item) => (
           <a href={item.href} class={itemClass(item.id)}>
             <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -95,15 +97,15 @@ const itemClass = (id: string) =>
           </a>
         ))}
       </nav>
-      <div class="border-t border-ink-700 p-3">
+      <div class="border-t border-shell-edge p-3">
         <div class="flex items-center gap-3 rounded-lg px-2 py-2">
-          <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-orange-600 to-amber-500 text-xs font-bold text-white">{initials}</span>
+          <span class="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-xs font-bold text-white">{initials}</span>
           <span class="min-w-0 flex-1">
-            <span class="block truncate text-sm font-medium">{me?.name}</span>
-            <span class="block text-xs capitalize text-stone-500">{role}</span>
+            <span class="block truncate text-sm font-medium text-white">{me?.name}</span>
+            <span class="block text-xs capitalize text-shell-dim">{role}</span>
           </span>
           <form method="POST" action="/api/auth/logout">
-            <button type="submit" class="flex min-h-12 min-w-10 items-center justify-center rounded-lg text-stone-500 hover:text-stone-200" aria-label="Log out" title="Log out">
+            <button type="submit" class="flex min-h-12 min-w-10 items-center justify-center rounded-lg text-shell-dim hover:text-white" aria-label="Log out" title="Log out">
               <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
             </button>
           </form>
@@ -112,7 +114,7 @@ const itemClass = (id: string) =>
     </aside>
 
     <!-- Top bar -->
-    <header class="sticky top-0 z-10 border-b border-ink-700 bg-ink-950/95 backdrop-blur lg:pl-60">
+    <header class="sticky top-0 z-10 border-b border-edge bg-surface/95 backdrop-blur lg:pl-60">
       <div class="flex items-center gap-4 px-4 py-3 lg:px-8">
         <a href="/dashboard" class="flex items-center gap-2 font-bold lg:hidden">
           <img src="/icons/icon-192.png" alt="Pocket Ops" class="h-8 w-8 rounded-lg bg-white object-cover" />
@@ -123,14 +125,24 @@ const itemClass = (id: string) =>
             type="search"
             name="q"
             placeholder="Search jobs, customers…"
-            class="w-full max-w-md min-h-12 rounded-full border border-ink-600 bg-ink-900 px-5 text-sm placeholder-stone-500 focus:border-amber-500 focus:outline-none"
+            class="w-full max-w-md min-h-12 rounded-full border border-edge-2 bg-card px-5 text-sm placeholder-faint focus:border-accent focus:outline-none"
           />
         </form>
         <div class="ml-auto flex items-center gap-3">
-          <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-orange-600 to-amber-500 text-xs font-bold text-white">{initials}</span>
+          <button
+            type="button"
+            id="theme-toggle"
+            class="flex min-h-12 min-w-12 items-center justify-center rounded-lg text-dim hover:bg-card-2 hover:text-body"
+            aria-label="Toggle dark mode"
+            title="Toggle dark mode"
+          >
+            <svg class="h-5 w-5 dark:hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+            <svg class="hidden h-5 w-5 dark:block" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+          </button>
+          <span class="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-xs font-bold text-white">{initials}</span>
           <span class="hidden text-sm font-medium sm:block">{me?.name?.split(' ')[0]}</span>
           <form method="POST" action="/api/auth/logout" class="lg:hidden">
-            <button type="submit" class="min-h-12 rounded-lg px-2 text-sm text-stone-400 hover:text-stone-100">Log out</button>
+            <button type="submit" class="min-h-12 rounded-lg px-2 text-sm text-dim hover:text-body">Log out</button>
           </form>
         </div>
       </div>
@@ -145,19 +157,19 @@ const itemClass = (id: string) =>
     <!-- Quick action: new job -->
     <a
       href="/dashboard/jobs/new"
-      class="fixed bottom-24 right-4 z-20 flex min-h-14 items-center gap-2 rounded-full bg-gradient-to-r from-orange-600 to-amber-500 px-5 font-semibold text-white shadow-lg shadow-orange-900/40 hover:from-orange-500 hover:to-amber-400 lg:bottom-6 lg:right-6"
+      class="fixed bottom-24 right-4 z-20 flex min-h-14 items-center gap-2 rounded-full bg-accent px-5 font-semibold text-white shadow-lg shadow-black/20 hover:bg-accent-2 lg:bottom-6 lg:right-6"
     >
       <span class="text-xl leading-none">+</span> New job
     </a>
 
     <!-- Fat-finger bottom nav (mobile) -->
-    <nav class="fixed inset-x-0 bottom-0 z-10 border-t border-ink-700 bg-ink-950/95 backdrop-blur lg:hidden">
+    <nav class="fixed inset-x-0 bottom-0 z-10 border-t border-edge bg-surface/95 backdrop-blur lg:hidden">
       <div class="grid grid-cols-6">
         {[...nav, ...adminNav].map((tab) => (
           <a
             href={tab.href}
             class={`relative flex min-h-16 flex-col items-center justify-center gap-1 text-[10px] ${
-              active === tab.id ? 'text-amber-400' : 'text-stone-400 hover:text-stone-200'
+              active === tab.id ? 'text-accent-text' : 'text-dim hover:text-body'
             }`}
           >
             <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -165,7 +177,7 @@ const itemClass = (id: string) =>
             </svg>
             {tab.label}
             {tab.id === 'inbox' && unread > 0 && (
-              <span class="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-orange-500" />
+              <span class="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-accent" />
             )}
           </a>
         ))}
@@ -176,6 +188,15 @@ const itemClass = (id: string) =>
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch(() => {});
       }
+      document.getElementById('theme-toggle')?.addEventListener('click', () => {
+        const el = document.documentElement;
+        const next = el.dataset.theme === 'dark' ? 'light' : 'dark';
+        el.dataset.theme = next;
+        document.cookie = `theme=${next};path=/;max-age=31536000;SameSite=Lax`;
+        document
+          .querySelector('meta[name="theme-color"]')
+          ?.setAttribute('content', next === 'dark' ? '#0b1524' : '#f4f6f9');
+      });
     </script>
   </body>
 </html>

@@ -44,11 +44,11 @@ const statusColors: Record<JobStatus, string> = {
   quoted: 'bg-violet-950 text-violet-300 border-violet-800',
   approved: 'bg-cyan-950 text-cyan-300 border-cyan-800',
   scheduled: 'bg-blue-950 text-blue-300 border-blue-800',
-  in_progress: 'bg-amber-950 text-amber-300 border-amber-800',
+  in_progress: 'bg-accent-soft text-accent-text border-accent-edge',
   completed: 'bg-lime-950 text-lime-300 border-lime-800',
-  invoiced: 'bg-orange-950 text-orange-300 border-orange-800',
+  invoiced: 'bg-accent-soft text-accent-text border-accent-edge',
   paid: 'bg-emerald-950 text-emerald-300 border-emerald-800',
-  cancelled: 'bg-ink-800 text-stone-400 border-ink-600',
+  cancelled: 'bg-card-2 text-dim border-edge-2',
 };
 ---
 
@@ -58,27 +58,27 @@ const statusColors: Record<JobStatus, string> = {
       <h1 class="text-xl font-bold">
         Jobs{filter ? ` · ${STATUS_LABELS[filter]}` : ''}{q ? ` · “${q}”` : ''}
       </h1>
-      <a href="/dashboard/jobs/new" class="flex min-h-12 items-center rounded-xl bg-orange-600 px-4 font-semibold text-white hover:bg-orange-500">+ New</a>
+      <a href="/dashboard/jobs/new" class="flex min-h-12 items-center rounded-xl bg-primary px-4 font-semibold text-white hover:bg-primary-2">+ New</a>
     </div>
 
     <div class="flex gap-2 overflow-x-auto pb-1">
-      <a href="/dashboard/jobs" class={`flex min-h-12 items-center whitespace-nowrap rounded-xl border px-4 text-sm ${!filter ? 'border-amber-500 text-amber-400' : 'border-ink-600 text-stone-400'}`}>All</a>
+      <a href="/dashboard/jobs" class={`flex min-h-12 items-center whitespace-nowrap rounded-xl border px-4 text-sm ${!filter ? 'border-accent text-accent-text' : 'border-edge-2 text-dim'}`}>All</a>
       {JOB_STATUSES.map((s) => (
-        <a href={`/dashboard/jobs?status=${s}`} class={`flex min-h-12 items-center whitespace-nowrap rounded-xl border px-4 text-sm ${filter === s ? 'border-amber-500 text-amber-400' : 'border-ink-600 text-stone-400'}`}>
+        <a href={`/dashboard/jobs?status=${s}`} class={`flex min-h-12 items-center whitespace-nowrap rounded-xl border px-4 text-sm ${filter === s ? 'border-accent text-accent-text' : 'border-edge-2 text-dim'}`}>
           {STATUS_LABELS[s]}
         </a>
       ))}
     </div>
 
     {rows.length === 0 && (
-      <p class="rounded-2xl border border-dashed border-ink-600 p-8 text-center text-stone-500">Nothing here yet.</p>
+      <p class="rounded-2xl border border-dashed border-edge-2 p-8 text-center text-faint">Nothing here yet.</p>
     )}
     <div class="space-y-2">
       {rows.map((j) => (
-        <a href={`/dashboard/jobs/${j.id}`} class="flex min-h-16 items-center justify-between gap-3 rounded-2xl border border-ink-700 bg-ink-900 px-4 py-3 hover:border-amber-500/50">
+        <a href={`/dashboard/jobs/${j.id}`} class="flex min-h-16 items-center justify-between gap-3 rounded-2xl border border-edge bg-card px-4 py-3 hover:border-accent/50">
           <div class="min-w-0">
             <p class="truncate font-medium">{j.title}</p>
-            <p class="truncate text-sm text-stone-400">
+            <p class="truncate text-sm text-dim">
               {j.customerName}{j.scheduledAt ? ` · ${j.scheduledAt.toLocaleDateString('en-GB')}` : ''}
             </p>
           </div>

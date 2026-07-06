@@ -89,29 +89,29 @@ const routeUrl =
     <div class="flex items-center justify-between gap-2">
       <h1 class="text-xl font-bold">Schedule</h1>
       <div class="flex items-center gap-1">
-        <a href={`/dashboard/schedule?week=${weekOffset - 1}`} class="flex min-h-12 min-w-12 items-center justify-center rounded-xl border border-ink-600 text-stone-300 hover:border-amber-500">←</a>
-        <a href="/dashboard/schedule" class={`flex min-h-12 items-center rounded-xl border px-3 text-sm ${weekOffset === 0 ? 'border-amber-500 text-amber-400' : 'border-ink-600 text-stone-300'}`}>{weekLabel}</a>
-        <a href={`/dashboard/schedule?week=${weekOffset + 1}`} class="flex min-h-12 min-w-12 items-center justify-center rounded-xl border border-ink-600 text-stone-300 hover:border-amber-500">→</a>
+        <a href={`/dashboard/schedule?week=${weekOffset - 1}`} class="flex min-h-12 min-w-12 items-center justify-center rounded-xl border border-edge-2 text-dim hover:border-accent">←</a>
+        <a href="/dashboard/schedule" class={`flex min-h-12 items-center rounded-xl border px-3 text-sm ${weekOffset === 0 ? 'border-accent text-accent-text' : 'border-edge-2 text-dim'}`}>{weekLabel}</a>
+        <a href={`/dashboard/schedule?week=${weekOffset + 1}`} class="flex min-h-12 min-w-12 items-center justify-center rounded-xl border border-edge-2 text-dim hover:border-accent">→</a>
       </div>
     </div>
 
     {routeUrl && (
-      <a href={routeUrl} target="_blank" rel="noopener" class="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-amber-500 font-semibold text-amber-400 hover:bg-amber-950">
+      <a href={routeUrl} target="_blank" rel="noopener" class="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-accent font-semibold text-accent-text hover:bg-accent-soft">
         🧭 Route today's {todayStops.length} stop{todayStops.length === 1 ? '' : 's'}
       </a>
     )}
 
     <div class="grid gap-3 lg:grid-cols-7 lg:gap-2">
       {byDay.map((day) => (
-        <section class={`rounded-2xl border p-3 ${day.isToday ? 'border-amber-500/60 bg-ink-900' : 'border-ink-700 bg-ink-900'} ${day.jobs.length === 0 ? 'max-lg:hidden lg:block' : ''}`}>
-          <p class={`text-xs font-semibold uppercase tracking-wider ${day.isToday ? 'text-amber-400' : 'text-stone-500'}`}>{day.label}{day.isToday ? ' · today' : ''}</p>
+        <section class={`rounded-2xl border p-3 ${day.isToday ? 'border-accent/60 bg-card' : 'border-edge bg-card'} ${day.jobs.length === 0 ? 'max-lg:hidden lg:block' : ''}`}>
+          <p class={`text-xs font-semibold uppercase tracking-wider ${day.isToday ? 'text-accent-text' : 'text-faint'}`}>{day.label}{day.isToday ? ' · today' : ''}</p>
           <div class="mt-2 space-y-2">
-            {day.jobs.length === 0 && <p class="text-xs text-stone-600">—</p>}
+            {day.jobs.length === 0 && <p class="text-xs text-faint">—</p>}
             {day.jobs.map((j) => (
-              <a href={`/dashboard/jobs/${j.id}`} class="block rounded-xl border border-ink-600 bg-ink-950 p-2.5 hover:border-amber-500/60">
-                <p class="text-xs font-semibold text-amber-400">{timeFmt.format(j.scheduledAt!)}</p>
+              <a href={`/dashboard/jobs/${j.id}`} class="block rounded-xl border border-edge-2 bg-surface p-2.5 hover:border-accent/60">
+                <p class="text-xs font-semibold text-accent-text">{timeFmt.format(j.scheduledAt!)}</p>
                 <p class="mt-0.5 truncate text-sm font-medium">{j.title}</p>
-                <p class="truncate text-xs text-stone-400">{j.customerName} · {STATUS_LABELS[j.status]}</p>
+                <p class="truncate text-xs text-dim">{j.customerName} · {STATUS_LABELS[j.status]}</p>
               </a>
             ))}
           </div>
@@ -120,7 +120,7 @@ const routeUrl =
     </div>
 
     {inWeek.length === 0 && (
-      <p class="rounded-2xl border border-dashed border-ink-600 p-8 text-center text-sm text-stone-500">
+      <p class="rounded-2xl border border-dashed border-edge-2 p-8 text-center text-sm text-faint">
         Nothing scheduled this week. Set a date on any job to see it here.
       </p>
     )}
