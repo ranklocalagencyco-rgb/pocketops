@@ -59,14 +59,15 @@ const itemClass = (id: string) =>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#151210" />
     <link rel="manifest" href="/manifest.json" />
-    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/icons/favicon.png" type="image/png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <title>{title} · Pocket Ops</title>
   </head>
   <body class="min-h-screen bg-ink-950 text-stone-100 pb-24 lg:pb-10">
     <!-- Sidebar (desktop) -->
     <aside class="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-ink-700 bg-ink-950 lg:flex">
       <a href="/dashboard" class="flex items-center gap-3 px-5 py-5">
-        <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-orange-600 to-amber-500 text-lg">⚡</span>
+        <img src="/icons/icon-192.png" alt="Pocket Ops" class="h-10 w-10 rounded-xl bg-white object-cover" />
         <span class="min-w-0">
           <span class="block text-sm font-bold tracking-widest">POCKET OPS</span>
           <span class="block truncate text-[11px] uppercase tracking-wider text-stone-500">{tenant?.name}</span>
@@ -114,7 +115,7 @@ const itemClass = (id: string) =>
     <header class="sticky top-0 z-10 border-b border-ink-700 bg-ink-950/95 backdrop-blur lg:pl-60">
       <div class="flex items-center gap-4 px-4 py-3 lg:px-8">
         <a href="/dashboard" class="flex items-center gap-2 font-bold lg:hidden">
-          <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-600 to-amber-500 text-sm">⚡</span>
+          <img src="/icons/icon-192.png" alt="Pocket Ops" class="h-8 w-8 rounded-lg bg-white object-cover" />
         </a>
         <h1 class="text-base font-bold">{title}</h1>
         <form method="GET" action="/dashboard/jobs" class="hidden flex-1 justify-center md:flex">
