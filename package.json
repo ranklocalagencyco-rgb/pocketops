@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
+    "dev:fg": "set CLAUDECODE=&& astro dev",
     "build": "astro build",
     "preview": "wrangler dev",
     "db:generate": "drizzle-kit generate",
