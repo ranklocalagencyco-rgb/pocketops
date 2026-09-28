@@ -7,6 +7,7 @@ import type { APIRoute } from 'astro';
 import { eq } from 'drizzle-orm';
 import { createDb, tenantWhere } from '../../../../db';
 import { jobPhotos } from '../../../../db/schema';
+import { fileResponse } from '../../../../media/serve';
 
 export const GET: APIRoute = async ({ params, locals }) => {
   const tenantId = locals.tenantId!;
@@ -20,10 +21,5 @@ export const GET: APIRoute = async ({ params, locals }) => {
   const object = await env.FILES.get(photo.r2Key);
   if (!object) return new Response('Not found', { status: 404 });
 
-  return new Response(object.body as unknown as BodyInit, {
-    headers: {
-      'Content-Type': photo.contentType,
-      'Cache-Control': 'private, max-age=3600',
-    },
-  });
+  return fileResponse(object, photo.contentType, `photo-${photo.id}`);
 };

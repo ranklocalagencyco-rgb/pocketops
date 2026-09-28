@@ -4,6 +4,7 @@ import type { APIRoute } from 'astro';
 import { eq } from 'drizzle-orm';
 import { createDb, tenantWhere } from '../../../../db';
 import { tenantDocuments } from '../../../../db/schema';
+import { fileResponse } from '../../../../media/serve';
 
 export const GET: APIRoute = async ({ params, locals }) => {
   const [doc] = await createDb(env.DB)
@@ -14,11 +15,5 @@ export const GET: APIRoute = async ({ params, locals }) => {
   if (!doc) return new Response('Not found', { status: 404 });
   const object = await env.FILES.get(doc.r2Key);
   if (!object) return new Response('Not found', { status: 404 });
-  return new Response(object.body as unknown as BodyInit, {
-    headers: {
-      'Content-Type': doc.contentType,
-      'Content-Disposition': `inline; filename="${doc.name.replace(/[^\w. -]/g, '')}"`,
-      'Cache-Control': 'private, max-age=3600',
-    },
-  });
+  return fileResponse(object, doc.contentType, doc.name);
 };

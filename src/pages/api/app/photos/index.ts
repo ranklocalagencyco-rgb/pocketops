@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm';
 import { createDb, tenantValues, tenantWhere } from '../../../../db';
 import { jobPhotos, jobs } from '../../../../db/schema';
 import { newId } from '../../../../lib/ids';
+import { PHOTO_TYPES, sniffType } from '../../../../media/sniff';
 
 const MAX_BYTES = 8 * 1024 * 1024;
 
@@ -27,16 +28,20 @@ export const POST: APIRoute = async ({ request, locals, url, redirect }) => {
 
   const form = await request.formData();
   const file = form.get('photo');
-  if (!(file instanceof File) || !file.type.startsWith('image/') || file.size === 0) {
+  if (!(file instanceof File) || file.size === 0) {
     return redirect(`/dashboard/jobs/${jobId}`, 303);
   }
   if (file.size > MAX_BYTES) return new Response('Photo too large (8MB max)', { status: 413 });
 
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const contentType = sniffType(bytes);
+  if (!contentType || !PHOTO_TYPES.has(contentType)) {
+    return new Response('Photos must be JPEG, PNG, WebP or HEIC images', { status: 415 });
+  }
+
   const photoId = newId();
   const r2Key = `${tenantId}/${jobId}/${photoId}`;
-  await env.FILES.put(r2Key, file.stream(), {
-    httpMetadata: { contentType: file.type },
-  });
+  await env.FILES.put(r2Key, bytes, { httpMetadata: { contentType } });
   await createDb(env.DB)
     .insert(jobPhotos)
     .values(
@@ -44,7 +49,7 @@ export const POST: APIRoute = async ({ request, locals, url, redirect }) => {
         id: photoId,
         jobId,
         r2Key,
-        contentType: file.type,
+        contentType,
         uploadedBy: locals.userId,
       }),
     );

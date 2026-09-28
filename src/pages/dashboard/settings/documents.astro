@@ -17,7 +17,7 @@ let error =
   errorParam === 'size'
     ? 'That file is over the 10MB limit.'
     : errorParam === 'type'
-      ? 'PDFs, images, and Word documents only.'
+      ? 'PDF, JPEG, PNG, WebP or HEIC images, or Word, Excel and PowerPoint files (.docx, .xlsx, .pptx) only.'
       : '';
 
 if (Astro.request.method === 'POST') {
@@ -81,7 +81,7 @@ const kb = (bytes: number) => (bytes > 1024 * 1024 ? `${(bytes / 1048576).toFixe
 
     <form method="POST" action="/api/app/docs" enctype="multipart/form-data" class="space-y-3 rounded-2xl border border-edge bg-card p-4">
       <input name="name" placeholder="Document name (e.g. Public liability insurance 2026)" class="w-full min-h-12 rounded-xl border border-edge-2 bg-surface px-4 text-base placeholder-faint focus:border-accent focus:outline-none" />
-      <input type="file" name="file" accept="application/pdf,image/*,.doc,.docx" required class="min-h-12 w-full rounded-xl border border-edge-2 bg-surface px-3 py-2.5 text-sm text-dim file:mr-3 file:rounded-lg file:border-0 file:bg-card-2 file:px-3 file:py-1.5 file:text-body" />
+      <input type="file" name="file" accept="application/pdf,image/*,.docx,.xlsx,.pptx" required class="min-h-12 w-full rounded-xl border border-edge-2 bg-surface px-3 py-2.5 text-sm text-dim file:mr-3 file:rounded-lg file:border-0 file:bg-card-2 file:px-3 file:py-1.5 file:text-body" />
       <label class="flex min-h-12 items-center gap-3 text-sm text-dim">
         <input type="checkbox" name="showOnPortal" value="1" checked class="h-5 w-5 rounded border-edge-2 bg-surface accent-orange-600" />
         Show under “Our credentials” on quotes and the client hub

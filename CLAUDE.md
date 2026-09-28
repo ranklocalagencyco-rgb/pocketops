@@ -52,7 +52,7 @@ proof; never ask them to "check if it works".
 
 ## Before every commit
 
-`npx astro check` must pass (0 errors), and the change must be verified live in the dev
+`npx astro check && npm test` must pass (0 errors, all tests green), and the change must be verified live in the dev
 server (see the `pocketops-dev` skill for how to run it on this machine — there are
 Windows-specific traps).
 
